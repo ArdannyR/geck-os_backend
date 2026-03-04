@@ -1,24 +1,25 @@
-// src/models/Workspace.js
-import { Schema, model } from 'mongoose';
+import mongoose from "mongoose";
 
-const workspaceSchema = new Schema({
-    nombre: {
-        type: String,
-        required: true,
-        trim: true
+const workspaceSchema = new mongoose.Schema(
+    {
+        name: { 
+            type: String,
+            required: true,
+            trim: true
+        },
+        owner: { 
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User', 
+            required: true
+        },
+        members: [{ 
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        }]
     },
-    dueño: {
-        type: Schema.Types.ObjectId,
-        ref: 'estudiante',
-        required: true
-    },
-    // Lista de usuarios que tienen acceso (incluyendo al dueño)
-    miembros: [{
-        type: Schema.Types.ObjectId,
-        ref: 'estudiante'
-    }]
-}, {
-    timestamps: true
-});
+    {
+        timestamps: true
+    }
+);
 
-export default model('Workspace', workspaceSchema);
+export default mongoose.model("Workspace", workspaceSchema);

@@ -1,72 +1,67 @@
-// src/models/item.js
-import { Schema, model } from "mongoose";
+import mongoose from "mongoose";
 
-const itemSchema = new Schema(
+const itemSchema = new mongoose.Schema(
   {
-    // Usuario dueño del ítem
     userId: {
-      type: Schema.Types.ObjectId,
-      ref: "estudiante",
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User", 
       required: true,
     },
-
-    workspaceId: { type: Schema.Types.ObjectId, ref: 'Workspace', default: null },
-
-    // Tipo de ítem: carpeta, nota, código, enlace
+    workspaceId: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "Workspace", 
+      default: null 
+    },
     type: {
       type: String,
       enum: ["folder", "note", "code", "link", "file"],
       required: true,
     },
-
-    // Nombre visible en el escritorio
     name: {
       type: String,
       required: true,
       trim: true,
     },
-
-    // Solo para enlaces
     url: {
       type: String,
       default: null,
     },
-
-    fileFormat: { type: String, default: null }, // ej: pdf, docx, mp3
-    publicId: { type: String, default: null },   // ID de Cloudinary por si quieres borrarlo después
-
+    fileFormat: { 
+      type: String, 
+      default: null 
+    },
+    publicId: { 
+      type: String, 
+      default: null 
+    },
     content: {
       type: String,
       default: "" 
     },
-
-    // Si es ítem raíz => null
     parentId: {
-      type: Schema.Types.ObjectId,
+      type: mongoose.Schema.Types.ObjectId,
       ref: "Item",
       default: null,
     },
-
-    // Posición en el escritorio
     position: {
       x: { type: Number, default: 100 },
       y: { type: Number, default: 100 },
     },
-
     guestPositions: [
       {
-        userId: { type: Schema.Types.ObjectId, ref: "estudiante" },
+        userId: { 
+          type: mongoose.Schema.Types.ObjectId, 
+          ref: "User" 
+        },
         x: Number,
         y: Number
       }
     ],
-
-    // 🆕 Compartido con otros usuarios
     sharedWith: [
       {
         userId: {
-          type: Schema.Types.ObjectId,
-          ref: "estudiante",
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User", 
         },
         permission: {
           type: String,
@@ -81,4 +76,4 @@ const itemSchema = new Schema(
   }
 );
 
-export default model("Item", itemSchema);
+export default mongoose.model("Item", itemSchema);

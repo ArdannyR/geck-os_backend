@@ -1,0 +1,83 @@
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
+
+const userSchema = new mongoose.Schema(
+    {
+        name: { 
+            type: String,
+            required: true,
+            trim: true
+        },
+        email: {
+            type: String,
+            required: true,
+            trim: true,
+            unique: true
+        },
+        password: {
+            type: String,
+            required: false, 
+            trim: true
+        },
+        status: {
+            type: Boolean,
+            default: true
+        },
+        token: {
+            type: String,
+            default: null
+        },
+        emailConfirmed: { 
+            type: Boolean,
+            default: false
+        },
+        role: { 
+            type: String,
+            enum: ['student', 'admin'], // 💡 Buena práctica: Restringir los roles permitidos
+            default: 'student'
+        },
+        preferences: {
+            theme: { 
+                type: String, 
+                enum: ["light", "dark"], 
+                default: "light" 
+            },
+            wallpaperUrl: { 
+                type: String, 
+                default: null 
+            }
+        },
+        googleId: {
+            type: String,
+            default: null
+        },
+        savedDesktops: [{ 
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User' 
+        }]
+    },
+    {
+        timestamps: true
+    }
+);
+
+// Cifrar la contraseña
+userSchema.methods.encryptPassword = async function (password) {
+    const salt = await bcrypt.genSalt(10);
+    return await bcrypt.hash(password, salt);
+};
+
+// Verificar si el password coincide
+userSchema.methods.matchPassword = async function (password) {
+    if (!this.password) return false; 
+    return await bcrypt.compare(password, this.password);
+};
+
+// Generar un token aleatorio
+userSchema.methods.createToken = function () {
+    const generatedToken = Math.random().toString(36).slice(2);
+    this.token = generatedToken;
+    return generatedToken;
+};
+
+export default mongoose.model('User', userSchema);
