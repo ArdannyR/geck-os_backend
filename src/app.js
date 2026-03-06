@@ -43,7 +43,9 @@ app.use(passport.initialize());
 app.get('/', (req, res) => res.send("🚀 Server MyDesk on"));
 
 // Endpoint principal
-app.use('/api/estudiante', authRoutes);
+app.use('/api/estudiante', authRoutes); // Esto mantiene vivo /api/estudiante/login para que Login.jsx funcione
+app.use('/api', authRoutes);            // Esto atrapa /api/registro y /api/auth/google para que Register.jsx no falle
+
 app.use('/api/user', userRoutes); 
 app.use('/api', itemRoutes); 
 app.use('/api', aiRoutes); 
