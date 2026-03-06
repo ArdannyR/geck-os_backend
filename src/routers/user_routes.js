@@ -14,7 +14,7 @@ router.use(verifyAuth);
 router.get('/perfil', getProfile);
 router.put('/estudiante/actualizarpassword', updatePassword); 
 router.put('/estudiante/:id', updateProfile);
-router.put('/preferencias', updatePreferences);
+router.put('/preferences', updatePreferences);
 router.post('/actualizar-imagen', updateImage);
 
 export default router;
