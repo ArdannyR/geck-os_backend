@@ -47,6 +47,7 @@ app.use('/api/estudiante', authRoutes); // Esto mantiene vivo /api/estudiante/lo
 app.use('/api', authRoutes);            // Esto atrapa /api/registro y /api/auth/google para que Register.jsx no falle
 
 app.use('/api/user', userRoutes); 
+app.use('/api/estudiante', userRoutes); // Esto mantiene vivo /api/estudiante/perfil para que Profile.jsx funcione
 app.use('/api', itemRoutes); 
 app.use('/api', aiRoutes); 
 app.use('/api', workspaceRoutes); 
