@@ -42,17 +42,13 @@ app.use(passport.initialize());
 // 7. Rutas
 app.get('/', (req, res) => res.send("🚀 Server MyDesk on"));
 
-// Endpoint principal
-app.use('/api', authRoutes);  
-app.use('/api/estudiante', authRoutes); 
-
-app.use('/api/user', userRoutes); 
-app.use('/api/estudiante', userRoutes); 
-app.use('/api', itemRoutes); 
-app.use('/api', aiRoutes); 
-app.use('/api', workspaceRoutes); 
-app.use('/api', dashboardRoutes); 
-app.use('/api', paymentRoutes);
+app.use('/api/auth', authRoutes);  
+app.use('/api/usuarios', userRoutes); 
+app.use('/api/items', itemRoutes); 
+app.use('/api/ia', aiRoutes); 
+app.use('/api/workspaces', workspaceRoutes); 
+app.use('/api/dashboard', dashboardRoutes); 
+app.use('/api/payments', paymentRoutes);
 
 // 8. Manejo de Errores (404)
 app.use((req, res) => {

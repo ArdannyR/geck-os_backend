@@ -6,6 +6,6 @@ const router = Router();
 router.use(verifyAuth);
 
 router.post("/share-desktop", shareDesktopAccess);
-router.get("/dashboard-data", getDashboardInfo);
+router.get("/data", getDashboardInfo);
 
 export default router;

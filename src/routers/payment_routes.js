@@ -5,6 +5,6 @@ import { verifyAuth } from '../middlewares/auth.js';
 const router = Router();
 router.use(verifyAuth);
 
-router.post("/payments/create-intent", createPaymentIntent);
+router.post("/create-intent", createPaymentIntent);
 
 export default router;
