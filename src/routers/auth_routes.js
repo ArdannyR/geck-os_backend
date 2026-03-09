@@ -5,12 +5,12 @@ import { registerUser, loginUser, confirmEmail, forgotPassword, verifyPasswordTo
 
 const router = Router();
 
-router.post('/registro', registerUser);
+router.post('/register', registerUser);
 router.post('/login', loginUser);
-router.get('/confirmar/:token', confirmEmail);
-router.post('/recuperarPassword', forgotPassword); 
-router.get('/recuperarPassword/:token', verifyPasswordToken); 
-router.post('/nuevoPassword/:token', resetPassword); 
+router.get('/confirm/:token', confirmEmail);
+router.post('/forgot-password', forgotPassword); 
+router.get('/forgot-password/:token', verifyPasswordToken); 
+router.post('/reset-password/:token', resetPassword);
 router.get('/google', passport.authenticate('google', { 
     scope: ['profile', 'email'],
     session: false 

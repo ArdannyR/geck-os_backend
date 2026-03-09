@@ -43,9 +43,9 @@ app.use(passport.initialize());
 app.get('/', (req, res) => res.send("🚀 Server MyDesk on"));
 
 app.use('/api/auth', authRoutes);  
-app.use('/api/usuarios', userRoutes); 
+app.use('/api/users', userRoutes);  
 app.use('/api/items', itemRoutes); 
-app.use('/api/ia', aiRoutes); 
+app.use('/api/ai', aiRoutes);        
 app.use('/api/workspaces', workspaceRoutes); 
 app.use('/api/dashboard', dashboardRoutes); 
 app.use('/api/payments', paymentRoutes);

@@ -5,10 +5,10 @@ import { verifyAuth } from '../middlewares/auth.js';
 const router = Router();
 router.use(verifyAuth);
 
-router.get('/perfil', getProfile);
-router.put('/actualizar-password', updatePassword); 
-router.put('/perfil/:id', updateProfile);         
+router.get('/profile', getProfile);
+router.put('/update-password', updatePassword); 
+router.put('/profile/:id', updateProfile);           
 router.patch('/preferences', updatePreferences);
-router.post('/actualizar-imagen', updateImage);
+router.post('/update-image', updateImage);
 
 export default router;

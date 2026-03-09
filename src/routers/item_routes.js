@@ -9,11 +9,10 @@ router.get("/desktop", getDesktop);
 router.get('/:id', getItemById);
 router.post("/", createItem); 
 router.post("/upload", uploadFileItem); 
-router.patch('/:id/renombrar', renameItem);
-router.patch('/:id/mover', moveItem);
+router.patch('/:id/rename', renameItem);  
+router.patch('/:id/move', moveItem);    
 router.patch('/positions/bulk', updateBulkPositions);
 router.put('/files/:id', updateTextContent); 
-
 router.delete('/:id', deleteItem);
 router.post("/share/:id", shareItem);
 
