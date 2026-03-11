@@ -15,9 +15,18 @@ export const registerUser = async (req, res) => {
             return res.status(400).json({ msg: "Lo sentimos, debes llenar todos los campos" });
         }
 
-        const emailExists = await User.findOne({ email });
-        if (emailExists) {
-            return res.status(400).json({ msg: "Lo sentimos, el email ya se encuentra registrado" });
+        const existingUser = await User.findOne({ email });
+        
+        if (existingUser) {
+            if (!existingUser.emailConfirmed) {
+                const token = existingUser.token || existingUser.createToken();
+                await existingUser.save();
+                return res.status(200).json({ 
+                    msg: "El usuario ya está registrado pero falta confirmar su cuenta.",
+                    token: token 
+                });
+            }
+            return res.status(400).json({ msg: "Lo sentimos, el email ya se encuentra registrado y confirmado" });
         }
 
         const newUser = new User(data);
@@ -26,8 +35,10 @@ export const registerUser = async (req, res) => {
 
         await sendRegistrationEmail(email, token);
         await newUser.save();
-
-        res.status(201).json({ msg: "Revisa tu correo electrónico para confirmar tu cuenta" });
+        res.status(201).json({ 
+            msg: "Usuario creado. Revisa tu correo electrónico para confirmar tu cuenta.",
+            token: token
+        });
     } catch (error) {
         console.error("❌ Error en registerUser:", error);
         res.status(500).json({ msg: `Error en el servidor - ${error.message}` });
@@ -37,9 +48,9 @@ export const registerUser = async (req, res) => {
 export const confirmEmail = async (req, res) => {
     try {
         const { token } = req.params;
-        
         const userDB = await User.findOne({ token });
-        if (!userDB) return res.status(404).json({ msg: "Token inválido o cuenta ya confirmada" });
+        
+        if (!userDB) return res.status(404).json({ msg: "Token inválido o ya usado" });
 
         userDB.token = null;
         userDB.emailConfirmed = true; 
@@ -63,7 +74,11 @@ export const forgotPassword = async (req, res) => {
         await userDB.save();
 
         await sendPasswordRecoveryEmail(email, token);
-        res.status(200).json({ msg: 'Revisa tu correo electrónico para restablecer tu cuenta' });
+        
+        res.status(200).json({ 
+            msg: 'Revisa tu correo electrónico para restablecer tu cuenta',
+            token: token
+        });
     } catch (error) {
         res.status(500).json({ msg: `Error en el servidor - ${error.message}` });
     }

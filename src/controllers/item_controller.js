@@ -83,7 +83,7 @@ export const getDesktop = async (req, res) => {
 
 export const createItem = async (req, res) => {
     try {
-        const userId = req.user._id; // 💡 Actualizado
+        const userId = req.user._id; 
         const { type, name, url, parentId, x, y, workspaceId } = req.body;
 
         if (!type || !name) return res.status(400).json({ ok: false, msg: "Tipo y nombre son obligatorios" });
