@@ -12,7 +12,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@huggingface/inference": "^4.13.11",
     "@sendgrid/mail": "^8.1.6",
     "bcryptjs": "^3.0.2",
     "cloudinary": "^2.8.0",

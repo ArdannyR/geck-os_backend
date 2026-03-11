@@ -1,36 +1,36 @@
 import axios from "axios";
-import { InferenceClient } from "@huggingface/inference";
 import User from "../models/User.js"; 
 import Recommendation from "../models/Recommendation.js"; 
 import { uploadBase64ToCloudinary } from "../helpers/cloudinary.js"; 
 
-const hf = new InferenceClient(process.env.HF_API_KEY);
+const getMicroserviceHeaders = () => {
+    return {
+        headers: {
+            "Content-Type": "application/json",
+            "x-api-key": process.env.PYTHON_MICROSERVICE_API_KEY
+        }
+    };
+};
 
 export const improveText = async (req, res) => {
     try {
         const { text } = req.body;
         if (!text) return res.status(400).json({ msg: "Texto requerido" });
 
-        const url = "https://api-inference.huggingface.com/models/facebook/bart-large-cnn";
+        const url = `${process.env.PYTHON_MICROSERVICE_URL}/ai/improve-text`;
 
         const response = await axios.post(
             url,
-            { inputs: `Improve the following text in Spanish:\n\n${text}` },
-            {
-                headers: {
-                    Authorization: `Bearer ${process.env.HF_API_KEY}`,
-                    "Content-Type": "application/json",
-                },
-                timeout: 60000,
-            }
+            { text }, 
+            getMicroserviceHeaders()
         );
 
-        const improved = response.data?.[0]?.generated_text ?? response.data;
+        const improved = response.data.improvedText;
         return res.status(200).json({ ok: true, improvedText: improved });
 
     } catch (error) {
         console.error("❌ Error en improveText:", error.message);
-        return res.status(500).json({ msg: "Error IA", error: error.message });
+        return res.status(500).json({ msg: "Error al comunicarse con el microservicio de IA", error: error.message });
     }
 };
 
@@ -42,16 +42,19 @@ export const chatWithAssistant = async (req, res) => {
             return res.status(400).json({ ok: false, msg: "El mensaje es obligatorio" });
         }
 
-        const pythonUrl = process.env.PYTHON_MICROSERVICE_URL; 
+        const pythonUrl = `${process.env.PYTHON_MICROSERVICE_URL}/ai/chat`; 
 
-        if (!pythonUrl) {
-            return res.status(500).json({ ok: false, msg: "Error de configuración: Falta PYTHON_MICROSERVICE_URL" });
+        if (!process.env.PYTHON_MICROSERVICE_URL) {
+            return res.status(500).json({ ok: false, msg: "Falta PYTHON_MICROSERVICE_URL en .env" });
         }
 
         const response = await axios.post(
             pythonUrl, 
             { mensaje },
-            { timeout: 120000 }
+            { 
+                ...getMicroserviceHeaders(), 
+                timeout: 120000 
+            }
         );
 
         return res.status(200).json({
@@ -61,40 +64,38 @@ export const chatWithAssistant = async (req, res) => {
 
     } catch (error) {
         console.error("❌ Error en chatWithAssistant:", error.message);
-        
-        if (error.code === 'ECONNREFUSED' || error.response?.status >= 500) {
-            return res.status(503).json({ ok: false, msg: "El asistente IA no está disponible en este momento." });
-        }
-        
-        return res.status(500).json({ ok: false, msg: "Error interno del servidor" });
+        return res.status(500).json({ ok: false, msg: "El asistente IA no está disponible en este momento." });
     }
 };
 
 export const generateWallpaper = async (req, res) => {
     try {
-        const userId = req.user._id; // 💡 Actualizado
+        const userId = req.user._id; 
         const { prompt } = req.body;
 
         if (!prompt) return res.status(400).json({ ok: false, msg: "El prompt es obligatorio" });
 
-        console.log(`🎨 Generando fondo SDXL para: "${prompt}"`);
+        console.log(`🎨 Solicitando fondo al microservicio para: "${prompt}"`);
 
-        const imageBlob = await hf.textToImage({
-            model: "stabilityai/stable-diffusion-xl-base-1.0",
-            inputs: prompt,
-            provider: "hf-inference", 
-            parameters: { 
-                negative_prompt: "blurry, low quality, distortion" 
+        const pythonUrl = `${process.env.PYTHON_MICROSERVICE_URL}/ai/generate-wallpaper`;
+
+        const response = await axios.post(
+            pythonUrl,
+            { prompt },
+            { 
+                ...getMicroserviceHeaders(), 
+                timeout: 120000 
             }
-        });
+        );
 
-        const arrayBuffer = await imageBlob.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        const base64Image = `data:image/png;base64,${buffer.toString('base64')}`;
+        const base64Image = response.data.imageBase64;
+
+        if (!base64Image) {
+            return res.status(500).json({ ok: false, msg: "El microservicio no devolvió la imagen correctamente" });
+        }
 
         console.log("☁️ Subiendo a Cloudinary...");
         
-        // 💡 Usando el nuevo helper de Cloudinary
         const secure_url = await uploadBase64ToCloudinary(base64Image, "VirtualDesk_Wallpapers");
 
         await User.findByIdAndUpdate(userId, {
@@ -112,22 +113,14 @@ export const generateWallpaper = async (req, res) => {
         return res.status(200).json({ ok: true, msg: "Fondo generado con éxito", url: secure_url });
 
     } catch (error) {
-        console.error("❌ Error en generateWallpaper:", error); 
-
-        if (error.message && (error.message.includes("503") || error.message.includes("loading"))) {
-             return res.status(503).json({ 
-                ok: false, 
-                msg: "La IA se está despertando 😴. Espera unos segundos e intenta de nuevo." 
-            });
-        }
-
-        return res.status(500).json({ ok: false, msg: "Error al generar imagen IA", error: error.message });
+        console.error("❌ Error en generateWallpaper:", error.message); 
+        return res.status(500).json({ ok: false, msg: "Error al generar imagen mediante el microservicio", error: error.message });
     }
 };
 
 export const getRecommendations = async (req, res) => {
     try {
-        const userId = req.user._id; // 💡 Actualizado
+        const userId = req.user._id; 
 
         const recs = await Recommendation.find({ userId })
             .sort({ createdAt: -1 })
