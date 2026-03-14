@@ -40,7 +40,7 @@ app.use(fileUpload({
 app.use(passport.initialize());
 
 // 7. Rutas
-app.get('/', (req, res) => res.send("🚀 Server MyDesk on"));
+app.get('/', (req, res) => res.send("🚀 Server Deck-os on"));
 
 app.use('/api/auth', authRoutes);  
 app.use('/api/users', userRoutes);  
