@@ -18,8 +18,6 @@ export const chatWithAssistant = async (req, res) => {
             { mensaje },
             { timeout: 120000 }
         );
-
-        // El backend de Python nos devuelve un objeto con "respuesta" y "metricas"
         return res.status(200).json({
             ok: true,
             data: response.data.respuesta 
@@ -40,16 +38,13 @@ export const generateWallpaper = async (req, res) => {
 
         console.log(`🎨 Solicitando fondo al microservicio para: "${prompt}"`);
 
-        // Llamamos a la ruta exacta de tu compañero
         const pythonUrl = `${process.env.PYTHON_MICROSERVICE_URL}/generar-fondo`;
 
         const response = await axios.post(
             pythonUrl,
-            { descripcion: prompt }, // Tu compañero le puso "descripcion" en lugar de "prompt"
+            { descripcion: prompt },
             { timeout: 120000 }
         );
-
-        // Tu compañero devuelve la imagen en el campo "imagen"
         const base64Image = response.data.imagen;
 
         if (!base64Image) {
