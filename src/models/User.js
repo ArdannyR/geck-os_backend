@@ -45,7 +45,7 @@ const userSchema = new mongoose.Schema(
             // ;)
             accent: {
                 type: String,
-                default: "none"
+                default: "white"
             },
             wallpaperUrl: { 
                 type: String, 
