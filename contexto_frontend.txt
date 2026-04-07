@@ -1,0 +1,1843 @@
+
+
+================================================
+📄 Archivo: \src\app.js
+================================================
+
+// 1. Importaciones de terceros
+import express from 'express';
+import dotenv from 'dotenv';
+import cors from 'cors';
+import { v2 as cloudinary } from 'cloudinary'; 
+import fileUpload from 'express-fileupload';
+import passport from 'passport';
+import './config/passport.js';
+
+// 2. Rutas
+import authRoutes from './routers/auth_routes.js';
+import userRoutes from './routers/user_routes.js';
+import itemRoutes from './routers/item_routes.js';
+import aiRoutes from './routers/ai_routes.js';
+import workspaceRoutes from './routers/workspace_routes.js';
+import dashboardRoutes from './routers/dashboard_routes.js';
+import paymentRoutes from './routers/payment_routes.js';
+
+// 3. Inicialización
+const app = express();
+dotenv.config();
+
+// 4. Variables Globales
+app.set('port', process.env.PORT || 3000);
+
+// 5. Configuración de Servicios
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// 6. Middlewares
+app.use(express.json());
+app.use(cors());
+app.use(fileUpload({
+    useTempFiles: true,
+    tempFileDir: './uploads'
+}));
+app.use(passport.initialize());
+
+// 7. Rutas
+app.get('/', (req, res) => res.send("🚀 Server Deck-os on"));
+
+app.use('/api/auth', authRoutes);  
+app.use('/api/users', userRoutes);  
+app.use('/api/items', itemRoutes); 
+app.use('/api/ai', aiRoutes);        
+app.use('/api/workspaces', workspaceRoutes); 
+app.use('/api/dashboard', dashboardRoutes); 
+app.use('/api/payments', paymentRoutes);
+
+// 8. Manejo de Errores (404)
+app.use((req, res) => {
+    console.log(`❌ 404 - Ruta no encontrada: ${req.method} ${req.originalUrl}`);
+    res.status(404).json({ msg: "Endpoint no encontrado - 404" });
+});
+
+export default app;
+
+================================================
+📄 Archivo: \src\config\nodemailer.js
+================================================
+
+import nodemailer from "nodemailer"
+import Transport from "nodemailer-brevo-transport" 
+import dotenv from "dotenv"
+dotenv.config()
+
+const transporter = nodemailer.createTransport(
+    new Transport({
+        apiKey: process.env.BREVO_API_KEY 
+    })
+)
+
+transporter.verify(function (error, success) {
+    if (error) {
+        console.log("❌ Error de conexión con Brevo API:", error);
+    } else {
+        console.log("✅ Servidor listo para enviar correos (Vía API Puerto 443)");
+    }
+});
+
+/**
+ * Función genérica para enviar correos
+ * @param {string} to - Email del destinatario
+ * @param {string} subject - Asunto del correo
+ * @param {string} html - Contenido HTML del correo
+ */
+const sendMail = async (to, subject, html) => {
+
+    try {
+        const info = await transporter.sendMail({
+            from: `"VirtualDesk" <${process.env.USER_MAILTRAP}>`, 
+            to,
+            subject,
+            html,
+        })
+        console.log("✅ Email enviado ID:", info.messageId)
+
+    } catch (error) {
+        console.error("❌ Error enviando email:", error.message)
+    }
+}
+
+export default sendMail
+
+================================================
+📄 Archivo: \src\config\passport.js
+================================================
+
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import User from '../models/User.js'; // 💡 Actualizado al nuevo modelo
+import dotenv from 'dotenv';
+dotenv.config();
+
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: `${process.env.BACKEND_URL || 'http://localhost:3000'}/api/auth/google/callback`
+  },
+  async (accessToken, refreshToken, profile, done) => {
+    try {
+        // 1. Verificar si el usuario ya existe por su Google ID
+        let user = await User.findOne({ googleId: profile.id });
+
+        if (user) {
+            return done(null, user);
+        }
+
+        // 2. Si no tiene Google ID, verificamos si existe por Email
+        user = await User.findOne({ email: profile.emails[0].value });
+
+        if (user) {
+            user.googleId = profile.id;
+            await user.save();
+            return done(null, user);
+        }
+
+        // 3. Si no existe, CREAMOS uno nuevo
+        const newUser = new User({
+            name: profile.displayName, 
+            email: profile.emails[0].value,
+            googleId: profile.id,
+            emailConfirmed: true 
+        });
+        
+        await newUser.save();
+        return done(null, newUser);
+
+    } catch (error) {
+        return done(error, null);
+    }
+  }
+));
+
+// Serialización
+passport.serializeUser((user, done) => done(null, user.id));
+passport.deserializeUser(async (id, done) => {
+    const user = await User.findById(id);
+    done(null, user);
+});
+
+================================================
+📄 Archivo: \src\controllers\ai_controller.js
+================================================
+
+import axios from "axios";
+import User from "../models/User.js"; 
+import Recommendation from "../models/Recommendation.js"; 
+import { uploadBase64ToCloudinary } from "../helpers/cloudinary.js"; 
+
+export const chatWithAssistant = async (req, res) => {
+    try {
+        const { mensaje } = req.body;
+
+        if (!mensaje) {
+            return res.status(400).json({ ok: false, msg: "El mensaje es obligatorio" });
+        }
+
+        const pythonUrl = `${process.env.PYTHON_MICROSERVICE_URL}/chat`; 
+
+        const response = await axios.post(
+            pythonUrl, 
+            { mensaje },
+            { timeout: 120000 }
+        );
+        return res.status(200).json({
+            ok: true,
+            data: response.data.respuesta 
+        });
+
+    } catch (error) {
+        console.error("❌ Error en chatWithAssistant:", error.message);
+        return res.status(500).json({ ok: false, msg: "El asistente IA no está disponible en este momento." });
+    }
+};
+
+export const generateWallpaper = async (req, res) => {
+    try {
+        const userId = req.user._id; 
+        const { prompt } = req.body;
+
+        if (!prompt) return res.status(400).json({ ok: false, msg: "El prompt es obligatorio" });
+
+        console.log(`🎨 Solicitando fondo al microservicio para: "${prompt}"`);
+
+        const pythonUrl = `${process.env.PYTHON_MICROSERVICE_URL}/generar-fondo`;
+
+        const response = await axios.post(
+            pythonUrl,
+            { descripcion: prompt },
+            { timeout: 120000 }
+        );
+        const base64Image = response.data.imagen;
+
+        if (!base64Image) {
+            return res.status(500).json({ ok: false, msg: "El microservicio no devolvió la imagen correctamente" });
+        }
+
+        console.log("☁️ Subiendo a Cloudinary...");
+        const secure_url = await uploadBase64ToCloudinary(base64Image, "VirtualDesk_Wallpapers");
+
+        await User.findByIdAndUpdate(userId, {
+            "preferences.wallpaperUrl": secure_url
+        });
+
+        const io = req.app.get("io");
+        if (io) {
+            io.to(`user:${userId}`).emit("preferences-updated", { 
+                theme: "light",
+                wallpaperUrl: secure_url 
+            });
+        }
+
+        return res.status(200).json({ ok: true, msg: "Fondo generado con éxito", url: secure_url });
+
+    } catch (error) {
+        console.error("❌ Error en generateWallpaper:", error.message); 
+        return res.status(500).json({ ok: false, msg: "Error al generar imagen mediante el microservicio" });
+    }
+};
+export const semanticSearch = async (req, res) => {
+    try {
+        const { consulta, archivos } = req.body;
+
+        if (!consulta || !archivos) {
+            return res.status(400).json({ ok: false, msg: "Falta la consulta o los archivos" });
+        }
+
+        const pythonUrl = `${process.env.PYTHON_MICROSERVICE_URL}/buscar`;
+
+        const response = await axios.post(pythonUrl, { consulta, archivos });
+
+        return res.status(200).json({
+            ok: true,
+            resultados: response.data.resultados
+        });
+
+    } catch (error) {
+        console.error("❌ Error en semanticSearch:", error.message);
+        return res.status(500).json({ ok: false, msg: "Error en la búsqueda semántica" });
+    }
+};
+
+export const getRecommendations = async (req, res) => {
+    try {
+        const userId = req.user._id; 
+
+        const recs = await Recommendation.find({ userId })
+            .sort({ createdAt: -1 })
+            .limit(30)
+            .lean();
+
+        return res.status(200).json({ ok: true, recommendations: recs });
+    } catch (error) {
+        console.error("❌ Error en getRecommendations:", error);
+        return res.status(500).json({ ok: false, msg: "Error en el servidor" });
+    }
+};
+
+export const improveText = async (req, res) => {
+    res.status(200).json({ ok: true, msg: "Función de mejora de texto aún no implementada" });
+}
+
+================================================
+📄 Archivo: \src\controllers\auth_controller.js
+================================================
+
+import User from "../models/User.js";
+import { sendRegistrationEmail, sendPasswordRecoveryEmail } from "../helpers/mail.js"; 
+import { createJWT } from "../helpers/jwt.js"; 
+
+export const registerUser = async (req, res) => {
+    try {
+        const { email, password, name } = req.body; 
+        
+        const data = {
+            ...req.body,
+            name: req.body.nombre || req.body.name 
+        };
+
+        if (Object.values(data).includes("")) {
+            return res.status(400).json({ msg: "Lo sentimos, debes llenar todos los campos" });
+        }
+
+        const existingUser = await User.findOne({ email });
+        
+        if (existingUser) {
+            if (!existingUser.emailConfirmed) {
+                const token = existingUser.token || existingUser.createToken();
+                await existingUser.save();
+                return res.status(200).json({ 
+                    msg: "El usuario ya está registrado pero falta confirmar su cuenta.",
+                    token: token 
+                });
+            }
+            return res.status(400).json({ msg: "Lo sentimos, el email ya se encuentra registrado y confirmado" });
+        }
+
+        const newUser = new User(data);
+        newUser.password = await newUser.encryptPassword(password);
+        const token = newUser.createToken();
+
+        await sendRegistrationEmail(email, token);
+        await newUser.save();
+        res.status(201).json({ 
+            msg: "Usuario creado. Revisa tu correo electrónico para confirmar tu cuenta.",
+            token: token
+        });
+    } catch (error) {
+        console.error("❌ Error en registerUser:", error);
+        res.status(500).json({ msg: `Error en el servidor - ${error.message}` });
+    }
+};
+
+export const confirmEmail = async (req, res) => {
+    try {
+        const { token } = req.params;
+        const userDB = await User.findOne({ token });
+        
+        if (!userDB) return res.status(404).json({ msg: "Token inválido o ya usado" });
+
+        userDB.token = null;
+        userDB.emailConfirmed = true; 
+        await userDB.save();
+
+        res.status(200).json({ msg: "Cuenta confirmada, ya puedes iniciar sesión" });
+    } catch (error) {
+        res.status(500).json({ msg: `Error en el servidor - ${error.message}` });
+    }
+};
+
+export const forgotPassword = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ msg: "Debes ingresar un correo electrónico" });
+
+        const userDB = await User.findOne({ email });
+        if (!userDB) return res.status(404).json({ msg: "El usuario no se encuentra registrado" });
+
+        const token = userDB.createToken();
+        await userDB.save();
+
+        await sendPasswordRecoveryEmail(email, token);
+        
+        res.status(200).json({ 
+            msg: 'Revisa tu correo electrónico para restablecer tu cuenta',
+            token: token
+        });
+    } catch (error) {
+        res.status(500).json({ msg: `Error en el servidor - ${error.message}` });
+    }
+};
+
+export const verifyPasswordToken = async (req, res) => {
+    try {
+        const { token } = req.params;
+        
+        const userDB = await User.findOne({ token });
+        if (!userDB) return res.status(404).json({ msg: "Lo sentimos, no se puede validar la cuenta" });
+
+        res.status(200).json({ msg: "Token confirmado, ya puedes crear tu nuevo password" });
+    } catch (error) {
+        res.status(500).json({ msg: `Error en el servidor - ${error.message}` });
+    }
+};
+
+export const resetPassword = async (req, res) => {
+    try {
+        const { token } = req.params;
+        const { password, confirmpassword } = req.body;
+
+        if (Object.values(req.body).includes("")) {
+            return res.status(400).json({ msg: "Debes llenar todos los campos" });
+        }
+        if (password !== confirmpassword) {
+            return res.status(400).json({ msg: "Los passwords no coinciden" });
+        }
+
+        const userDB = await User.findOne({ token });
+        if (!userDB) return res.status(404).json({ msg: "No se puede validar la cuenta" });
+
+        userDB.password = await userDB.encryptPassword(password);
+        userDB.token = null;
+        await userDB.save();
+
+        res.status(200).json({ msg: "Felicitaciones, ya puedes iniciar sesión con tu nuevo password" });
+    } catch (error) {
+        res.status(500).json({ msg: `Error en el servidor - ${error.message}` });
+    }
+};
+
+export const loginUser = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (Object.values(req.body).includes("")) {
+            return res.status(400).json({ msg: "Debes llenar todos los campos" });
+        }
+
+        const userDB = await User.findOne({ email });
+        if (!userDB) return res.status(404).json({ msg: "El usuario no se encuentra registrado" });
+
+        if (!userDB.emailConfirmed) { 
+            return res.status(403).json({ msg: "Debes verificar la cuenta antes de iniciar sesión" });
+        }
+
+        const isPasswordCorrect = await userDB.matchPassword(password);
+        if (!isPasswordCorrect) return res.status(401).json({ msg: "El password no es correcto" });
+
+        const token = createJWT(userDB._id, userDB.role); 
+
+        res.status(200).json({
+            token,
+            nombre: userDB.name, 
+            rol: userDB.role,    
+            _id: userDB._id,
+            email: userDB.email
+        });
+        
+    } catch (error) {
+        res.status(500).json({ msg: `Error en el servidor - ${error.message}` });
+    }
+};
+
+================================================
+📄 Archivo: \src\controllers\dashboard_controller.js
+================================================
+
+import User from "../models/User.js"; 
+import Workspace from "../models/Workspace.js";
+
+export const shareDesktopAccess = async (req, res) => {
+    try {
+        const ownerId = req.user._id;
+        const { email } = req.body; 
+
+        if (!email) return res.status(400).json({ msg: "Debes ingresar un correo." });
+
+        const invitedUser = await User.findOne({ email });
+        if (!invitedUser) return res.status(404).json({ msg: "Usuario no encontrado con ese correo." });
+
+        if (String(invitedUser._id) === String(ownerId)) {
+            return res.status(400).json({ msg: "No puedes compartir el escritorio contigo mismo." });
+        }
+
+        if (invitedUser.savedDesktops.includes(ownerId)) {
+            return res.status(200).json({ 
+                ok: true, 
+                msg: "El usuario ya tiene acceso a tu escritorio." 
+            });
+        }
+
+        invitedUser.savedDesktops.push(ownerId);
+        await invitedUser.save();
+        
+        return res.status(200).json({ 
+            ok: true, 
+            msg: `Acceso concedido a ${invitedUser.name}` 
+        });
+
+    } catch (error) {
+        console.error("❌ Error en shareDesktopAccess:", error);
+        return res.status(500).json({ msg: "Error al compartir escritorio" });
+    }
+};
+
+export const getDashboardInfo = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        
+        const userDB = await User.findById(userId)
+            .populate('savedDesktops', 'name email') 
+            .select('-password -token -emailConfirmed');
+
+        if (!userDB) return res.status(404).json({ msg: "Usuario no encontrado" });
+
+        const workspaces = await Workspace.find({ 
+            members: userId 
+        }).select('name owner members createdAt');
+
+        const userDataForFrontend = {
+            ...userDB.toObject(),
+            nombre: userDB.name, 
+            escritoriosGuardados: userDB.savedDesktops.map(desktop => ({
+                _id: desktop._id,
+                nombre: desktop.name, 
+                email: desktop.email
+            }))
+        };
+        delete userDataForFrontend.name;
+        delete userDataForFrontend.savedDesktops;
+
+        const workspacesForFrontend = workspaces.map(ws => ({
+            _id: ws._id,
+            nombre: ws.name,
+            dueño: ws.owner,
+            miembros: ws.members,
+            createdAt: ws.createdAt
+        }));
+
+        return res.status(200).json({ 
+            ok: true, 
+            usuario: userDataForFrontend, 
+            workspaces: workspacesForFrontend 
+        });
+    } catch (error) {
+        console.error("❌ Error en getDashboardInfo:", error);
+        return res.status(500).json({ msg: "Error al obtener datos del dashboard" });
+    }
+};
+
+================================================
+📄 Archivo: \src\controllers\item_controller.js
+================================================
+
+import Item from "../models/item.js";
+import User from "../models/User.js"; 
+import Workspace from "../models/Workspace.js";
+import { uploadFileToCloudinary } from "../helpers/cloudinary.js"; 
+
+export const getDesktop = async (req, res) => {
+    try {
+        const myId = req.user._id; // 💡 Actualizado
+        let { remoteUserId, folderId, workspaceId } = req.query;
+
+        if (workspaceId && workspaceId !== "null" && workspaceId !== "undefined") {
+            const workspace = await Workspace.findById(workspaceId);
+            if (!workspace) return res.status(404).json({ ok: false, msg: "Workspace no encontrado" });
+
+            const isMember = workspace.members.includes(myId);
+            if (!isMember) return res.status(403).json({ ok: false, msg: "No tienes acceso a este espacio" });
+
+            const queryWS = { workspaceId: workspaceId };
+            if (folderId && folderId !== "null") {
+                queryWS.parentId = folderId;
+            } else {
+                queryWS.$or = [{ parentId: null }, { parentId: { $exists: false } }];
+            }
+
+            const items = await Item.find(queryWS).lean();
+            return res.status(200).json({ ok: true, items });
+        }
+
+        const isRemoteMode = remoteUserId && remoteUserId !== "undefined" && remoteUserId !== "null" && String(remoteUserId) !== String(myId);
+        const targetUserId = isRemoteMode ? remoteUserId : myId;
+
+        if (isRemoteMode) {
+            const me = await User.findById(myId);
+            const hasPermission = me.savedDesktops.some(id => String(id) === String(targetUserId));
+
+            if (!hasPermission) {
+                return res.status(403).json({ ok: false, msg: "No tienes permiso para ver este escritorio." });
+            }
+        }
+
+        const query = { userId: targetUserId };
+        if (folderId && folderId !== "null" && folderId !== "undefined") {
+            query.parentId = folderId;
+        } else {
+            query.$or = [{ parentId: null }, { parentId: { $exists: false } }];
+        }
+
+        let items = [];
+        if (!isRemoteMode && (!folderId || folderId === "null" || folderId === "undefined")) {
+            items = await Item.find({
+                $or: [
+                    query, 
+                    { "sharedWith.userId": myId } 
+                ]
+            }).lean();
+        } else {
+            items = await Item.find(query).lean();
+        }
+
+        if (items.length > 0) {
+            items = items.map(item => {
+                if (String(item.userId) !== String(myId) && item.guestPositions) {
+                    const myPos = item.guestPositions.find(gp => String(gp.userId) === String(myId));
+                    if (myPos) item.position = { x: myPos.x, y: myPos.y };
+                }
+                return item;
+            });
+        }
+
+        const ownerSettings = await User.findById(targetUserId).select('preferences');
+
+        return res.status(200).json({ 
+            ok: true, 
+            items,
+            preferences: ownerSettings?.preferences 
+        });
+
+    } catch (error) {
+        console.error("❌ Error en getDesktop:", error);
+        return res.status(500).json({ ok: false, msg: error.message });
+    }
+};
+
+export const createItem = async (req, res) => {
+    try {
+        const userId = req.user._id; 
+        const { type, name, url, parentId, x, y, workspaceId } = req.body;
+
+        if (!type || !name) return res.status(400).json({ ok: false, msg: "Tipo y nombre son obligatorios" });
+        if (type === "link" && !url) return res.status(400).json({ ok: false, msg: "La URL es obligatoria para enlaces" });
+
+        const newItem = new Item({
+            userId,
+            type,
+            name,
+            url: url || null,
+            parentId: (parentId && parentId !== "null") ? parentId : null,
+            position: { x: x ?? 100, y: y ?? 100 },
+            workspaceId: (workspaceId && workspaceId !== "null") ? workspaceId : null
+        });
+
+        await newItem.save();
+
+        const io = req.app.get("io");
+        if (io) {
+            if (workspaceId) {
+                io.to(`workspace:${workspaceId}`).emit("item-created", newItem);
+            } else {
+                io.to(`user:${userId}`).emit("item-created", newItem);
+            }
+            if (newItem.sharedWith && newItem.sharedWith.length > 0) {
+                newItem.sharedWith.forEach(s => io.to(`user:${s.userId}`).emit("item-created", newItem));
+            }
+        }
+
+        return res.status(201).json({ ok: true, msg: "Ítem creado exitosamente", item: newItem });
+    } catch (error) {
+        return res.status(500).json({ ok: false, msg: `Error en el servidor - ${error}` });
+    }
+};
+
+export const uploadFileItem = async (req, res) => {
+    try {
+        const userId = req.user._id; // 💡 Actualizado
+        const { parentId, x, y, workspaceId } = req.body;
+
+        if (!req.files || !req.files.archivo) {
+            return res.status(400).json({ ok: false, msg: "No se ha seleccionado ningún archivo." });
+        }
+
+        const file = req.files.archivo;
+        
+        // 💡 Usando el nuevo helper de Cloudinary
+        const cloudData = await uploadFileToCloudinary(file.tempFilePath, "VirtualDesk_Docs");
+
+        const newItem = new Item({
+            userId,
+            type: "file",
+            name: file.name,
+            url: cloudData.secure_url,
+            fileFormat: cloudData.format || file.name.split('.').pop(),
+            publicId: cloudData.public_id,
+            parentId: (parentId && parentId !== "null") ? parentId : null,
+            position: { x: Number(x) || 100, y: Number(y) || 100 },
+            workspaceId: (workspaceId && workspaceId !== "null") ? workspaceId : null
+        });
+
+        await newItem.save();
+
+        const io = req.app.get("io");
+        if (io) {
+            if (workspaceId) io.to(`workspace:${workspaceId}`).emit("item-created", newItem);
+            else io.to(`user:${userId}`).emit("item-created", newItem);
+        }
+
+        return res.status(201).json({ ok: true, msg: "Archivo subido exitosamente", item: newItem });
+    } catch (error) {
+        return res.status(500).json({ ok: false, msg: "Error al subir el archivo" });
+    }
+};
+
+export const getItemById = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const item = await Item.findById(id);
+        if (!item) return res.status(404).json({ ok: false, msg: "Ítem no encontrado" });
+        return res.status(200).json({ ok: true, item });
+    } catch (error) {
+        return res.status(500).json({ ok: false, msg: error.message });
+    }
+};
+
+export const renameItem = async (req, res) => {
+    try {
+        const userId = req.user._id; // 💡 Actualizado
+        const { id } = req.params;
+        const { name } = req.body;
+
+        if (!name || !String(name).trim()) return res.status(400).json({ ok: false, msg: "El nombre es obligatorio" });
+
+        const item = await Item.findOneAndUpdate(
+            { _id: id, userId },
+            { name: String(name).trim() },
+            { new: true }
+        );
+
+        if (!item) return res.status(404).json({ ok: false, msg: "Ítem no encontrado o no pertenece al usuario" });
+
+        const io = req.app.get("io");
+        if (io) {
+            const payload = { id: item._id, name: item.name, parentId: item.parentId, position: item.position, type: item.type };
+            io.to(`user:${userId}`).emit("item-renamed", payload);
+            if (item.sharedWith?.length) {
+                item.sharedWith.forEach(s => io.to(`user:${s.userId}`).emit("item-renamed", payload));
+            }
+        }
+
+        return res.status(200).json({ ok: true, msg: "Ítem renombrado correctamente", item });
+    } catch (error) {
+        return res.status(500).json({ ok: false, msg: `Error en el servidor - ${error.message}` });
+    }
+};
+
+export const moveItem = async (req, res) => {
+    try {
+        const userId = req.user._id; // 💡 Actualizado
+        const { id } = req.params;
+        const { x, y } = req.body;
+
+        if (x === undefined && y === undefined) return res.status(400).json({ ok: false, msg: "Faltan coordenadas" });
+
+        const item = await Item.findById(id);
+        if (!item) return res.status(404).json({ ok: false, msg: "Ítem no encontrado" });
+
+        const isOwner = String(item.userId) === String(userId);
+        const isShared = item.sharedWith.some(s => String(s.userId) === String(userId));
+
+        if (!isOwner && !isShared) return res.status(403).json({ ok: false, msg: "No tienes permiso para mover esto" });
+
+        if (isOwner) {
+            if (x !== undefined) item.position.x = Number(x);
+            if (y !== undefined) item.position.y = Number(y);
+        } else {
+            const guestPosIndex = item.guestPositions.findIndex(gp => String(gp.userId) === String(userId));
+            if (guestPosIndex >= 0) {
+                if (x !== undefined) item.guestPositions[guestPosIndex].x = Number(x);
+                if (y !== undefined) item.guestPositions[guestPosIndex].y = Number(y);
+            } else {
+                item.guestPositions.push({ userId, x: Number(x ?? item.position.x), y: Number(y ?? item.position.y) });
+            }
+        }
+
+        await item.save();
+        return res.status(200).json({ ok: true, msg: "Ítem movido correctamente" });
+    } catch (error) {
+        return res.status(500).json({ ok: false, msg: error.message });
+    }
+};
+
+export const updateBulkPositions = async (req, res) => {
+    try {
+        const userId = req.user._id; // 💡 Actualizado
+        const { items } = req.body; 
+
+        if (!items || !Array.isArray(items)) return res.status(400).json({ ok: false, msg: "Formato de datos incorrecto" });
+
+        const operations = items.map(item => ({
+            updateOne: {
+                filter: { _id: item.id, userId },
+                update: { $set: { "position.x": item.x, "position.y": item.y } }
+            }
+        }));
+
+        if (operations.length > 0) await Item.bulkWrite(operations);
+
+        return res.status(200).json({ ok: true, msg: "Escritorio organizado guardado" });
+    } catch (error) {
+        return res.status(500).json({ ok: false, msg: error.message });
+    }
+};
+
+export const updateTextContent = async (req, res) => {
+    try {
+        const userId = req.user._id; // 💡 Actualizado
+        const { id } = req.params;
+        const { content } = req.body;
+
+        if (!content) return res.status(400).json({ msg: "El contenido es obligatorio" });
+
+        const file = await Item.findOne({
+            _id: id,
+            type: { $in: ["note", "code"] },
+            $or: [{ userId: userId }, { "sharedWith": { $elemMatch: { userId: userId, permission: "edit" } } }]
+        });
+
+        if (!file) return res.status(404).json({ msg: "Archivo no encontrado o no tienes permiso de edición" });
+
+        file.content = content;
+        await file.save();
+
+        const io = req.app.get("io");
+        if (io) io.to(`user:${file.userId}`).emit("file-change", { fileId: id, content });
+
+        res.status(200).json({ ok: true, msg: "Contenido guardado correctamente" });
+    } catch (error) {
+        res.status(500).json({ msg: "Error guardando contenido" });
+    }
+};
+
+export const deleteItem = async (req, res) => {
+    try {
+        const userId = req.user._id; // 💡 Actualizado
+        const { id } = req.params;
+
+        const root = await Item.findOne({ _id: id, userId }).lean();
+        if (!root) return res.status(404).json({ ok: false, msg: "No existe este ítem o no pertenece al usuario" });
+
+        const toDelete = new Set([String(id)]);
+        const queue = [id];
+        let guard = 0;
+
+        while (queue.length) {
+            guard++;
+            if (guard > 5000) return res.status(400).json({ ok: false, msg: "Árbol demasiado grande o ciclo detectado" });
+
+            const parentId = queue.shift();
+            const children = await Item.find({ parentId, userId }).select("_id").lean();
+            for (const ch of children) {
+                const chId = String(ch._id);
+                if (!toDelete.has(chId)) {
+                    toDelete.add(chId);
+                    queue.push(ch._id);
+                }
+            }
+        }
+
+        const idsArray = Array.from(toDelete);
+        await Item.deleteMany({ _id: { $in: idsArray }, userId });
+
+        const io = req.app.get("io");
+        if (io) {
+            io.to(`user:${userId}`).emit("item-deleted", { id, deleted: idsArray.length, ids: idsArray });
+            if (root.sharedWith && root.sharedWith.length > 0) {
+                root.sharedWith.forEach(s => io.to(`user:${s.userId}`).emit("item-deleted", { id, deleted: idsArray.length, ids: idsArray }));
+            }
+        }
+
+        return res.status(200).json({ ok: true, msg: "Ítem eliminado correctamente", deleted: idsArray.length });
+    } catch (error) {
+        return res.status(500).json({ ok: false, msg: `Error en el servidor - ${error.message}` });
+    }
+};
+
+export const shareItem = async (req, res) => {
+    try {
+        const ownerId = req.user._id; // 💡 Actualizado
+        const { id } = req.params;
+        const { email, permission } = req.body;
+
+        if (!email) return res.status(400).json({ msg: "Email requerido" });
+        if (!["read", "edit"].includes(permission)) return res.status(400).json({ msg: "Permiso inválido (read/edit)" });
+
+        const item = await Item.findOne({ _id: id, userId: ownerId });
+        if (!item) return res.status(403).json({ msg: "No puedes compartir este ítem (no eres propietario)" });
+
+        const invitedUser = await User.findOne({ email });
+        if (!invitedUser) return res.status(404).json({ msg: "Usuario invitado no existe" });
+
+        if (String(invitedUser._id) === String(ownerId)) return res.status(400).json({ msg: "No puedes compartir contigo mismo" });
+
+        const index = item.sharedWith.findIndex(s => String(s.userId) === String(invitedUser._id));
+        if (index >= 0) item.sharedWith[index].permission = permission;
+        else item.sharedWith.push({ userId: invitedUser._id, permission });
+
+        await item.save();
+
+        const io = req.app.get("io");
+        if (io) io.to(`user:${invitedUser._id}`).emit("item-shared", item);
+
+        return res.status(200).json({ ok: true, msg: "Ítem compartido correctamente", sharedWith: item.sharedWith });
+    } catch (error) {
+        return res.status(500).json({ msg: "Error en el servidor" });
+    }
+};
+
+================================================
+📄 Archivo: \src\controllers\payment_controller.js
+================================================
+
+import stripe from "../helpers/stripe.js"; 
+
+export const createPaymentIntent = async (req, res) => {
+    try {
+        const { amount } = req.body;
+        
+        if (!amount) {
+            return res.status(400).json({ ok: false, msg: "Debes enviar el monto" });
+        }
+        
+        const paymentIntent = await stripe.paymentIntents.create({
+            amount: amount * 100, 
+            currency: "usd",
+            automatic_payment_methods: { enabled: true },
+        });
+
+        return res.status(200).json({ 
+            ok: true, 
+            clientSecret: paymentIntent.client_secret 
+        });
+    } catch (error) {
+        console.error("❌ Error Stripe:", error); 
+        return res.status(500).json({ ok: false, msg: "Error creando el pago" });
+    }
+};
+
+================================================
+📄 Archivo: \src\controllers\user_controller.js
+================================================
+
+import User from "../models/User.js";
+import { uploadFileToCloudinary } from "../helpers/cloudinary.js"; 
+import mongoose from "mongoose";
+
+export const getProfile = (req, res) => {
+    const user = req.user; // 💡 Actualizado
+    
+    const { token, emailConfirmed, createdAt, updatedAt, __v, password, ...profileData } = user.toObject ? user.toObject() : user;
+    
+    profileData.nombre = profileData.name;
+    delete profileData.name;
+
+    res.status(200).json(profileData);
+};
+
+export const updatePassword = async (req, res) => {
+    try {
+        const userId = req.user._id; // 💡 Actualizado
+        const { passwordactual, passwordnuevo } = req.body;
+
+        if (!passwordactual || !passwordnuevo) {
+            return res.status(400).json({ msg: "Debes enviar el password actual y el nuevo" });
+        }
+
+        const userDB = await User.findById(userId);
+        if (!userDB) return res.status(404).json({ msg: "Usuario no encontrado" });
+
+        const isPasswordCorrect = await userDB.matchPassword(passwordactual);
+        if (!isPasswordCorrect) return res.status(400).json({ msg: "Lo sentimos, el password actual no es correcto" });
+
+        userDB.password = await userDB.encryptPassword(passwordnuevo);
+        await userDB.save();
+
+        res.status(200).json({ msg: "Password actualizado correctamente" });
+    } catch (error) {
+        res.status(500).json({ msg: `Error en el servidor - ${error.message}` });
+    }
+};
+
+export const updateProfile = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nombre, name, email } = req.body; 
+        const finalName = nombre || name;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ msg: `ID inválido: ${id}` });
+        
+        const userDB = await User.findById(id);
+        if (!userDB) return res.status(404).json({ msg: `No existe el usuario con ID ${id}` });
+
+        if (Object.values(req.body).includes("")) return res.status(400).json({ msg: "Debes llenar todos los campos" });
+
+        if (userDB.email !== email) {
+            const emailExists = await User.findOne({ email });
+            if (emailExists) {
+                return res.status(400).json({ msg: `El email ya se encuentra registrado` });
+            }
+        }
+
+        userDB.name = finalName ?? userDB.name;
+        userDB.email = email ?? userDB.email;
+        await userDB.save();
+
+        res.status(200).json({ msg: "Perfil actualizado correctamente", user: userDB });
+    } catch (error) {
+        console.error("❌ Error en updateProfile:", error);
+        res.status(500).json({ msg: `Error en el servidor - ${error.message}` });
+    }
+};
+
+export const updatePreferences = async (req, res) => {
+    try {
+        const userId = req.user._id; // 💡 Actualizado
+        const { theme, wallpaperUrl, accent } = req.body; // ;)
+
+        if (theme && !["light", "dark"].includes(theme)) {
+            return res.status(400).json({ ok: false, msg: "Theme inválido (light/dark)" });
+        }
+
+        const userDB = await User.findById(userId);
+        if (!userDB) return res.status(404).json({ ok: false, msg: "Usuario no encontrado" });
+        if (theme) userDB.preferences.theme = theme;
+        if (accent) userDB.preferences.accent = accent; // ;)
+        if (wallpaperUrl !== undefined) userDB.preferences.wallpaperUrl = wallpaperUrl;
+
+        await userDB.save();
+
+        const io = req.app.get("io");
+        if (io) {
+            io.to(`user:${userId}`).emit("preferences-updated", {
+                theme: userDB.preferences.theme,
+                accent: userDB.preferences.accent, // ;)
+                wallpaperUrl: userDB.preferences.wallpaperUrl
+            });
+        }
+
+        return res.status(200).json({ ok: true, msg: "Preferencias actualizadas", preferences: userDB.preferences });
+    } catch (error) {
+        console.error("❌ Error en updatePreferences:", error);
+        return res.status(500).json({ ok: false, msg: `Error en el servidor - ${error.message}` });
+    }
+};
+
+export const updateImage = async (req, res) => {
+    try {
+        const userId = req.user._id; // 💡 Actualizado
+
+        if (!req.files || !req.files.image) {
+            return res.status(400).json({ ok: false, msg: "Debes enviar un archivo en el campo 'image'" });
+        }
+
+        const file = req.files.image;
+
+        if (!file.tempFilePath) {
+            return res.status(400).json({ ok: false, msg: "Error al procesar el archivo temporal" });
+        }
+
+        // 💡 Usando el nuevo helper de Cloudinary
+        const { secure_url, public_id } = await uploadFileToCloudinary(file.tempFilePath, "VirtualDesk");
+
+        const userDB = await User.findByIdAndUpdate(
+            userId,
+            { $set: { "preferences.wallpaperUrl": secure_url } },
+            { new: true }
+        );
+
+        return res.status(200).json({
+            ok: true,
+            msg: "Imagen subida correctamente",
+            wallpaperUrl: secure_url,
+            publicId: public_id,
+            preferences: userDB?.preferences || { wallpaperUrl: secure_url }
+        });
+    } catch (error) {
+        console.error("❌ Error en updateImage:", error);
+        return res.status(500).json({ ok: false, msg: "Error en el servidor", error: error.message });
+    }
+};
+
+================================================
+📄 Archivo: \src\controllers\workspace_controller.js
+================================================
+
+import Workspace from "../models/Workspace.js";
+import User from "../models/User.js"; 
+
+export const createWorkspace = async (req, res) => {
+    try {
+        const userId = req.user._id; 
+        const { nombre, name } = req.body;
+        
+        const finalName = nombre || name;
+
+        if (!finalName) return res.status(400).json({ ok: false, msg: "El nombre es obligatorio" });
+
+        const newWorkspace = new Workspace({
+            name: finalName,
+            owner: userId,
+            members: [userId] 
+        });
+
+        await newWorkspace.save();
+
+        return res.status(201).json({ 
+            ok: true, 
+            msg: "Espacio de trabajo creado", 
+            workspace: newWorkspace 
+        });
+
+    } catch (error) {
+        console.error("❌ Error en createWorkspace:", error);
+        return res.status(500).json({ ok: false, msg: "Error al crear workspace" });
+    }
+};
+
+export const inviteMember = async (req, res) => {
+    try {
+        const { workspaceId, email } = req.body;
+
+        if (!workspaceId || !email) {
+            return res.status(400).json({ ok: false, msg: "Faltan datos" });
+        }
+
+        const invitedUser = await User.findOne({ email });
+        if (!invitedUser) {
+            return res.status(404).json({ ok: false, msg: "Usuario no encontrado" });
+        }
+
+        const workspace = await Workspace.findById(workspaceId);
+        if (!workspace) {
+            return res.status(404).json({ ok: false, msg: "Workspace no encontrado" });
+        }
+
+        if (workspace.members.includes(invitedUser._id)) {
+            return res.status(400).json({ ok: false, msg: "El usuario ya es miembro" });
+        }
+
+        workspace.members.push(invitedUser._id);
+        await workspace.save();
+
+        return res.status(200).json({ 
+            ok: true, 
+            msg: `Se añadió a ${invitedUser.name} al equipo.` 
+        });
+
+    } catch (error) {
+        console.error("❌ Error en inviteMember:", error);
+        return res.status(500).json({ ok: false, msg: "Error al invitar miembro" });
+    }
+};
+
+================================================
+📄 Archivo: \src\database.js
+================================================
+
+import mongoose from "mongoose";
+
+mongoose.set("strictQuery", true);
+
+const connection = async () => {
+    try {
+        const dbURI = process.env.MONGODB_URI || process.env.MONGODB_URI_LOCAL;
+        const { connection } = await mongoose.connect(dbURI);
+        console.log(`✅ Base de datos conectada en ${connection.host} - puerto ${connection.port}`);
+    } catch (error) {
+        console.error("❌ Error conectando a MongoDB:", error.message);
+        process.exit(1); 
+    }
+};
+
+export default connection;
+
+================================================
+📄 Archivo: \src\helpers\cloudinary.js
+================================================
+
+import { v2 as cloudinary } from "cloudinary";
+import fs from "fs-extra";
+
+/**
+ * Sube un archivo físico (temporal) a Cloudinary y lo elimina del servidor local.
+ */
+export const uploadFileToCloudinary = async (filePath, folder = "VirtualDesk_Files") => {
+    try {
+        const result = await cloudinary.uploader.upload(filePath, { 
+            folder: folder,
+            resource_type: "auto", 
+            use_filename: true,
+            unique_filename: true
+        });
+
+        // Borramos el archivo temporal del servidor
+        await fs.unlink(filePath);
+        
+        return { 
+            secure_url: result.secure_url, 
+            public_id: result.public_id,
+            format: result.format,      
+            resource_type: result.resource_type 
+        };
+
+    } catch (error) {
+        await fs.unlink(filePath).catch(() => {}); 
+        throw error;
+    }
+};
+
+/**
+ * Sube una imagen en formato Base64 (típico de IAs generativas) a Cloudinary.
+ */
+export const uploadBase64ToCloudinary = async (base64, folder = "VirtualDesk_AI") => {
+    const buffer = Buffer.from(base64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+    
+    const { secure_url } = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream({ 
+            folder, 
+            resource_type: 'auto' 
+        }, (err, res) => {
+            if (err) reject(err);
+            else resolve(res);
+        });
+        stream.end(buffer);
+    });
+    
+    return secure_url;
+};
+
+================================================
+📄 Archivo: \src\helpers\jwt.js
+================================================
+
+import jwt from "jsonwebtoken";
+
+/**
+ * Crea un token JWT para el usuario.
+ * No usamos fallbacks inseguros para JWT_SECRET. Si falta, la app debe fallar fuerte.
+ */
+export const createJWT = (id, role) => {
+    if (!process.env.JWT_SECRET) {
+        throw new Error("CRITICAL: JWT_SECRET no está definido en las variables de entorno");
+    }
+
+    return jwt.sign(
+        { id, role }, 
+        process.env.JWT_SECRET, 
+        { expiresIn: "1d" }
+    );
+};
+
+================================================
+📄 Archivo: \src\helpers\mail.js
+================================================
+
+import sendMail from "../config/nodemailer.js"; // Asegúrate de que este archivo exista
+
+export const sendRegistrationEmail = (userMail, token) => {
+    return sendMail(
+        userMail,
+        "Bienvenido a VirtualDesk - Confirma tu cuenta",
+        `
+            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                <h1 style="color: #4A90E2;">¡Bienvenido a VirtualDesk!</h1>
+                <p>Hola, haz clic en el siguiente botón para confirmar tu cuenta y empezar a organizar tu vida digital:</p>
+                <a href="${process.env.URL_FRONTEND}/confirmar/${token}" 
+                   style="display: inline-block; padding: 10px 20px; background-color: #4A90E2; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0;">
+                    Confirmar mi cuenta
+                </a>
+                <hr style="border: none; border-top: 1px solid #eee; margin-top: 30px;">
+                <footer style="font-size: 12px; color: #888;">El equipo de VirtualDesk te da la más cordial bienvenida.</footer>
+            </div>
+        `
+    );
+};
+
+export const sendPasswordRecoveryEmail = (userMail, token) => {
+    return sendMail(
+        userMail,
+        "VirtualDesk - Recupera tu contraseña",
+        `
+            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                <h1 style="color: #E24A4A;">VirtualDesk</h1>
+                <p>Has solicitado restablecer tu contraseña. Haz clic en el siguiente enlace para crear una nueva:</p>
+                <a href="${process.env.URL_FRONTEND}/reset/${token}" 
+                   style="display: inline-block; padding: 10px 20px; background-color: #E24A4A; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0;">
+                    Restablecer mi contraseña
+                </a>
+                <p style="font-size: 14px; color: #666;">Si no solicitaste este cambio, puedes ignorar este correo.</p>
+                <hr style="border: none; border-top: 1px solid #eee; margin-top: 30px;">
+                <footer style="font-size: 12px; color: #888;">El equipo de VirtualDesk.</footer>
+            </div>
+        `
+    );
+};
+
+================================================
+📄 Archivo: \src\helpers\stripe.js
+================================================
+
+import Stripe from "stripe";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+export default stripe;
+
+================================================
+📄 Archivo: \src\index.js
+================================================
+
+import app from "./app.js"; 
+import connection from "./database.js";
+import http from "http";
+import { Server } from "socket.io";
+import { startRecommendationsCron } from "./jobs/recommendations_cron.js";
+
+const startServer = async () => {
+  // 1. Conectar a la Base de Datos
+  await connection();
+  
+  // 2. Iniciar tareas programadas
+  startRecommendationsCron();
+
+  // 3. Crear el servidor HTTP y vincular WebSockets
+  const server = http.createServer(app);
+  const io = new Server(server, { cors: { origin: "*" } });
+
+  // Guardamos la instancia de io en Express por si un controlador la necesita
+  app.set("io", io);
+
+  // 4. Lógica de WebSockets
+  io.on("connection", (socket) => {
+    console.log("✅ Socket conectado:", socket.id);
+
+    socket.on("join-user-room", (userId) => {
+      socket.join(`user:${userId}`);
+      console.log(`👥 Usuario unido a la sala: user:${userId}`);
+    });
+
+    // Eventos de colaboración sincronizada
+    socket.on("window-open", (p) => socket.to(`user:${p.userId}`).emit("window-open", p.windowData));
+    socket.on("window-move", (p) => socket.to(`user:${p.userId}`).emit("window-move", { windowId: p.windowId, position: p.position }));
+    socket.on("window-close", (p) => socket.to(`user:${p.userId}`).emit("window-close", { windowId: p.windowId }));
+    socket.on("file-change", (p) => socket.to(`user:${p.userId}`).emit("file-change", { fileId: p.fileId, content: p.content }));
+    socket.on("code-change", (p) => socket.to(`user:${p.userId}`).emit("code-change", { content: p.content, language: p.language }));
+
+    socket.on("disconnect", () => {
+      console.log("❌ Socket desconectado:", socket.id);
+    });
+  });
+
+  // 5. Levantar el servidor
+  server.listen(app.get("port"), () => {
+    console.log(`🚀 Servidor corriendo en http://localhost:${app.get("port")}`);
+  });
+};
+
+startServer();
+
+================================================
+📄 Archivo: \src\jobs\recommendations_cron.js
+================================================
+
+import cron from "node-cron";
+import Item from "../models/item.js"; 
+import Recommendation from "../models/Recommendation.js"; 
+
+const buildRecommendationsForNote = (noteText) => {
+  const recs = [];
+
+  if (!noteText || noteText.trim().length < 30) {
+    recs.push({ title: "Amplía tu nota", text: "Tu nota es muy corta. Añade más detalle para que sea útil.", type: "productivity" });
+  }
+
+  if (noteText.includes("http") || noteText.includes("www")) {
+    recs.push({ title: "Convierte enlaces en ítems", text: "Detecté enlaces en tu nota. Te conviene guardarlos como ítems tipo link.", type: "cleanup" });
+  }
+
+  if (noteText.toLowerCase().includes("tarea") || noteText.toLowerCase().includes("pendiente")) {
+    recs.push({ title: "Extrae tareas", text: "Parece que tienes tareas pendientes. Considera crear una lista de tareas o una nota separada.", type: "productivity" });
+  }
+
+  return recs;
+};
+
+export const startRecommendationsCron = () => {
+  cron.schedule("*/10 * * * *", async () => {
+    try {
+      console.log("⏰ Cron: Generando recomendaciones...");
+
+      const notes = await Item.find({ type: "note" }).sort({ updatedAt: -1 }).limit(20).lean();
+
+      for (const note of notes) {
+        const userId = note.userId;
+        const noteId = note._id;
+        const content = note.content || "";
+
+        const recs = buildRecommendationsForNote(content);
+
+        for (const r of recs) {
+            // 💡 Usamos el modelo Recommendation
+          const exists = await Recommendation.findOne({ userId, noteId, title: r.title }).lean();
+
+          if (!exists) {
+            await Recommendation.create({
+              userId, noteId, title: r.title, text: r.text, type: r.type
+            });
+          }
+        }
+      }
+      console.log("✅ Cron: recomendaciones generadas.");
+    } catch (err) {
+      console.error("❌ Cron recomendaciones:", err.message);
+    }
+  });
+};
+
+================================================
+📄 Archivo: \src\middlewares\auth.js
+================================================
+
+import jwt from "jsonwebtoken";
+import User from "../models/User.js"; // 💡 Apuntamos al nuevo modelo
+
+export const verifyAuth = async (req, res, next) => {
+    const { authorization } = req.headers;
+    
+    if (!authorization || !authorization.startsWith("Bearer ")) {
+        return res.status(401).json({ msg: "Acceso denegado: token no proporcionado o formato inválido" });
+    }
+
+    try {
+        const token = authorization.split(" ")[1];
+        
+        // Verificamos el token. Si JWT_SECRET no existe, lanzará un error capturado por el catch.
+        const { id } = jwt.verify(token, process.env.JWT_SECRET);
+        
+        // 💡 Buscamos en el modelo 'User'
+        const userDB = await User.findById(id).lean().select("-password");
+        
+        if (!userDB) {
+            return res.status(401).json({ msg: "Usuario no encontrado o token inválido" });
+        }
+
+        // 💡 ESTÁNDAR DE LA INDUSTRIA: Guardamos el usuario en req.user (antes era req.estudianteHeader)
+        req.user = userDB;
+        
+        next();
+    } catch (error) {
+        console.error("❌ Error verificando JWT:", error.message);
+        return res.status(401).json({ msg: `Token inválido o expirado` });
+    }
+};
+
+================================================
+📄 Archivo: \src\models\item.js
+================================================
+
+import mongoose from "mongoose";
+
+const itemSchema = new mongoose.Schema(
+  {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User", 
+      required: true,
+    },
+    workspaceId: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "Workspace", 
+      default: null 
+    },
+    type: {
+      type: String,
+      enum: ["folder", "note", "code", "link", "file"],
+      required: true,
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    url: {
+      type: String,
+      default: null,
+    },
+    fileFormat: { 
+      type: String, 
+      default: null 
+    },
+    publicId: { 
+      type: String, 
+      default: null 
+    },
+    content: {
+      type: String,
+      default: "" 
+    },
+    parentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Item",
+      default: null,
+    },
+    position: {
+      x: { type: Number, default: 100 },
+      y: { type: Number, default: 100 },
+    },
+    guestPositions: [
+      {
+        userId: { 
+          type: mongoose.Schema.Types.ObjectId, 
+          ref: "User" 
+        },
+        x: Number,
+        y: Number
+      }
+    ],
+    sharedWith: [
+      {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User", 
+        },
+        permission: {
+          type: String,
+          enum: ["read", "edit"],
+          default: "read",
+        },
+      },
+    ],
+  },
+  {
+    timestamps: true,
+  }
+);
+
+export default mongoose.model("Item", itemSchema);
+
+================================================
+📄 Archivo: \src\models\Recommendation.js
+================================================
+
+import mongoose from "mongoose";
+
+const recommendationSchema = new mongoose.Schema(
+  {
+    userId: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: "User", 
+        required: true 
+    },
+    noteId: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: "Item", 
+        required: false 
+    },
+    title: { 
+        type: String, 
+        required: true 
+    },
+    text: { 
+        type: String, 
+        required: true 
+    },
+    type: { 
+        type: String, 
+        default: "general" // general | productivity | cleanup | ai
+    },
+    status: { 
+        type: String, 
+        enum: ["new", "read"], 
+        default: "new" 
+    }
+  },
+  { timestamps: true }
+);
+
+export default mongoose.model("Recommendation", recommendationSchema);
+
+================================================
+📄 Archivo: \src\models\User.js
+================================================
+
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
+
+const userSchema = new mongoose.Schema(
+    {
+        name: { 
+            type: String,
+            required: true,
+            trim: true
+        },
+        email: {
+            type: String,
+            required: true,
+            trim: true,
+            unique: true
+        },
+        password: {
+            type: String,
+            required: false, 
+            trim: true
+        },
+        status: {
+            type: Boolean,
+            default: true
+        },
+        token: {
+            type: String,
+            default: null
+        },
+        emailConfirmed: { 
+            type: Boolean,
+            default: false
+        },
+        role: { 
+            type: String,
+            enum: ['student', 'admin'], // 💡 Buena práctica: Restringir los roles permitidos
+            default: 'student'
+        },
+        preferences: {
+            theme: { 
+                type: String, 
+                enum: ["light", "dark"], 
+                default: "light" 
+            },
+            // ;)
+            accent: {
+                type: String,
+                default: "none"
+            },
+            wallpaperUrl: { 
+                type: String, 
+                default: null 
+            }
+        },
+        googleId: {
+            type: String,
+            default: null
+        },
+        savedDesktops: [{ 
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User' 
+        }]
+    },
+    {
+        timestamps: true
+    }
+);
+
+// Cifrar la contraseña
+userSchema.methods.encryptPassword = async function (password) {
+    const salt = await bcrypt.genSalt(10);
+    return await bcrypt.hash(password, salt);
+};
+
+// Verificar si el password coincide
+userSchema.methods.matchPassword = async function (password) {
+    if (!this.password) return false; 
+    return await bcrypt.compare(password, this.password);
+};
+
+// Generar un token aleatorio
+userSchema.methods.createToken = function () {
+    const generatedToken = Math.random().toString(36).slice(2);
+    this.token = generatedToken;
+    return generatedToken;
+};
+
+export default mongoose.model('User', userSchema);
+
+================================================
+📄 Archivo: \src\models\Workspace.js
+================================================
+
+import mongoose from "mongoose";
+
+const workspaceSchema = new mongoose.Schema(
+    {
+        name: { 
+            type: String,
+            required: true,
+            trim: true
+        },
+        owner: { 
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User', 
+            required: true
+        },
+        members: [{ 
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'User'
+        }]
+    },
+    {
+        timestamps: true
+    }
+);
+
+export default mongoose.model("Workspace", workspaceSchema);
+
+================================================
+📄 Archivo: \src\routers\ai_routes.js
+================================================
+
+import { Router } from 'express';
+import { improveText, chatWithAssistant, generateWallpaper, getRecommendations, semanticSearch } from '../controllers/ai_controller.js';
+import { verifyAuth } from '../middlewares/auth.js';
+
+const router = Router();
+router.use(verifyAuth);
+
+router.post('/improve-text', improveText);
+router.post('/chat', chatWithAssistant);
+router.post('/semantic-search', semanticSearch);
+router.post('/generate-wallpaper', generateWallpaper);
+router.get("/recommendations", getRecommendations);
+
+export default router;
+
+================================================
+📄 Archivo: \src\routers\auth_routes.js
+================================================
+
+import { Router } from 'express';
+import passport from 'passport';
+import { createJWT } from '../helpers/jwt.js';
+import { registerUser, loginUser, confirmEmail, forgotPassword, verifyPasswordToken, resetPassword } from '../controllers/auth_controller.js';
+
+const router = Router();
+
+router.post('/register', registerUser);
+router.post('/login', loginUser);
+router.get('/confirm/:token', confirmEmail);
+router.post('/forgot-password', forgotPassword); 
+router.get('/forgot-password/:token', verifyPasswordToken); 
+router.post('/reset-password/:token', resetPassword);
+router.get('/google', passport.authenticate('google', { 
+    scope: ['profile', 'email'],
+    session: false 
+}));
+router.get('/google/callback', 
+    passport.authenticate('google', { session: false, failureRedirect: '/login' }),
+    (req, res) => {
+        const user = req.user;
+        const token = createJWT(user._id, user.role);
+        res.redirect(`${process.env.URL_FRONTEND}/google-success?token=${token}`);
+    }
+);
+
+export default router;
+
+================================================
+📄 Archivo: \src\routers\dashboard_routes.js
+================================================
+
+import { Router } from 'express';
+import { shareDesktopAccess, getDashboardInfo } from '../controllers/dashboard_controller.js';
+import { verifyAuth } from '../middlewares/auth.js';
+
+const router = Router();
+router.use(verifyAuth);
+
+router.post("/share-desktop", shareDesktopAccess);
+router.get("/data", getDashboardInfo);
+
+export default router;
+
+================================================
+📄 Archivo: \src\routers\item_routes.js
+================================================
+
+import { Router } from 'express';
+import { getDesktop, createItem, uploadFileItem, getItemById, renameItem, moveItem, updateBulkPositions, updateTextContent, deleteItem, shareItem } from '../controllers/item_controller.js';
+import { verifyAuth } from '../middlewares/auth.js';
+
+const router = Router();
+router.use(verifyAuth);
+
+router.get("/desktop", getDesktop); 
+router.get('/:id', getItemById);
+router.post("/", createItem); 
+router.post("/upload", uploadFileItem); 
+router.patch('/:id/rename', renameItem);  
+router.patch('/:id/move', moveItem);    
+router.patch('/positions/bulk', updateBulkPositions);
+router.put('/files/:id', updateTextContent); 
+router.delete('/:id', deleteItem);
+router.post("/share/:id", shareItem);
+
+export default router;
+
+================================================
+📄 Archivo: \src\routers\payment_routes.js
+================================================
+
+import { Router } from 'express';
+import { createPaymentIntent } from '../controllers/payment_controller.js';
+import { verifyAuth } from '../middlewares/auth.js';
+
+const router = Router();
+router.use(verifyAuth);
+
+router.post("/create-intent", createPaymentIntent);
+
+export default router;
+
+================================================
+📄 Archivo: \src\routers\user_routes.js
+================================================
+
+import { Router } from 'express';
+import { getProfile, updatePassword, updateProfile, updatePreferences, updateImage } from '../controllers/user_controller.js';
+import { verifyAuth } from '../middlewares/auth.js';
+
+const router = Router();
+router.use(verifyAuth);
+
+router.get('/profile', getProfile);
+router.put('/update-password', updatePassword); 
+router.put('/profile/:id', updateProfile);           
+router.patch('/preferences', updatePreferences);
+router.post('/update-image', updateImage);
+
+export default router;
+
+================================================
+📄 Archivo: \src\routers\workspace_routes.js
+================================================
+
+import { Router } from 'express';
+import { createWorkspace, inviteMember } from '../controllers/workspace_controller.js';
+import { verifyAuth } from '../middlewares/auth.js';
+
+const router = Router();
+router.use(verifyAuth);
+
+router.post("/", createWorkspace);
+router.post("/invite", inviteMember);
+
+export default router;

@@ -42,6 +42,11 @@ const userSchema = new mongoose.Schema(
                 enum: ["light", "dark"], 
                 default: "light" 
             },
+            // ;)
+            accent: {
+                type: String,
+                default: "white"
+            },
             wallpaperUrl: { 
                 type: String, 
                 default: null 

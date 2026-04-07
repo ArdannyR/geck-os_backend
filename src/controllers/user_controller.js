@@ -71,7 +71,7 @@ export const updateProfile = async (req, res) => {
 export const updatePreferences = async (req, res) => {
     try {
         const userId = req.user._id; // 💡 Actualizado
-        const { theme, wallpaperUrl } = req.body;
+        const { theme, wallpaperUrl, accent } = req.body; // ;)
 
         if (theme && !["light", "dark"].includes(theme)) {
             return res.status(400).json({ ok: false, msg: "Theme inválido (light/dark)" });
@@ -79,8 +79,8 @@ export const updatePreferences = async (req, res) => {
 
         const userDB = await User.findById(userId);
         if (!userDB) return res.status(404).json({ ok: false, msg: "Usuario no encontrado" });
-
         if (theme) userDB.preferences.theme = theme;
+        if (accent) userDB.preferences.accent = accent; // ;)
         if (wallpaperUrl !== undefined) userDB.preferences.wallpaperUrl = wallpaperUrl;
 
         await userDB.save();
@@ -89,6 +89,7 @@ export const updatePreferences = async (req, res) => {
         if (io) {
             io.to(`user:${userId}`).emit("preferences-updated", {
                 theme: userDB.preferences.theme,
+                accent: userDB.preferences.accent, // ;)
                 wallpaperUrl: userDB.preferences.wallpaperUrl
             });
         }
