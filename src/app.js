@@ -15,6 +15,7 @@ import aiRoutes from './routers/ai_routes.js';
 import workspaceRoutes from './routers/workspace_routes.js';
 import dashboardRoutes from './routers/dashboard_routes.js';
 import paymentRoutes from './routers/payment_routes.js';
+import executionRoutes from './routers/execution_routes.js';
 
 // 3. Inicialización
 const app = express();
@@ -49,6 +50,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/workspaces', workspaceRoutes); 
 app.use('/api/dashboard', dashboardRoutes); 
 app.use('/api/payments', paymentRoutes);
+app.use('/api/execute', executionRoutes);
 
 // 8. Manejo de Errores (404)
 app.use((req, res) => {
