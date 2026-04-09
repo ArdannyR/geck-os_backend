@@ -136,3 +136,64 @@ export const updateImage = async (req, res) => {
         return res.status(500).json({ ok: false, msg: "Error en el servidor", error: error.message });
     }
 };
+
+export const deleteAccount = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        // 1. Recibimos el texto que el usuario escribió en el frontend
+        const { confirmationText } = req.body; 
+
+        // 2. Construimos cómo DEBERÍA verse el texto (ej. "delete_Arda")
+        // Usamos req.user.name porque tu middleware de Auth ya te trae los datos del usuario
+        // Le quitamos los espacios en blanco por si su nombre es "Juan Perez" -> "delete_JuanPerez"
+        const formattedName = req.user.name.replace(/\s+/g, '');
+        const expectedText = `delete_${formattedName}`;
+
+        // 3. Validamos si el texto coincide (Case-sensitive)
+        if (!confirmationText || confirmationText !== expectedText) {
+            return res.status(400).json({ 
+                ok: false, 
+                msg: `Confirmación incorrecta. Debes escribir exactamente: ${expectedText}` 
+            });
+        }
+
+        // Eliminacion completa
+        const userFiles = await Item.find({ userId, publicId: { $ne: null } });
+        for (const file of userFiles) {
+            await cloudinary.uploader.destroy(file.publicId).catch(() => {});
+        }
+
+        await Item.deleteMany({ userId });
+
+        await Item.updateMany(
+            {}, 
+            { 
+                $pull: { 
+                    sharedWith: { userId: userId },
+                    guestPositions: { userId: userId }
+                } 
+            }
+        );
+
+        await Workspace.deleteMany({ owner: userId });
+        await Workspace.updateMany(
+            { members: userId }, 
+            { $pull: { members: userId } }
+        );
+
+        await Recommendation.deleteMany({ userId });
+
+        await User.updateMany(
+            { savedDesktops: userId },
+            { $pull: { savedDesktops: userId } }
+        );
+
+        await User.findByIdAndDelete(userId);
+
+        return res.status(200).json({ ok: true, msg: "Tu cuenta y todos tus datos han sido eliminados correctamente." });
+
+    } catch (error) {
+        console.error("❌ Error en deleteAccount:", error);
+        return res.status(500).json({ ok: false, msg: "Hubo un error al intentar eliminar la cuenta." });
+    }
+};
