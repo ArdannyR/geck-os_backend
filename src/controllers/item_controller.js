@@ -362,3 +362,25 @@ export const shareItem = async (req, res) => {
         return res.status(500).json({ msg: "Error en el servidor" });
     }
 };
+
+export const getAllItems = async (req, res) => {
+    try {
+        const userId = req.user._id;
+
+        const items = await Item.find({
+            $or: [
+                { userId: userId },
+                { "sharedWith.userId": userId }
+            ]
+        }).lean();
+
+        return res.status(200).json({ 
+            ok: true, 
+            items 
+        });
+
+    } catch (error) {
+        console.error("❌ Error en getAllItems:", error);
+        return res.status(500).json({ ok: false, msg: error.message });
+    }
+};

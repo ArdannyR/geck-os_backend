@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getDesktop, createItem, uploadFileItem, getItemById, renameItem, moveItem, updateBulkPositions, updateTextContent, deleteItem, shareItem } from '../controllers/item_controller.js';
+import { getDesktop, createItem, uploadFileItem, getItemById, renameItem, moveItem, updateBulkPositions, updateTextContent, deleteItem, shareItem, getAllItems } from '../controllers/item_controller.js';
 import { verifyAuth } from '../middlewares/auth.js';
 
 const router = Router();
@@ -15,5 +15,6 @@ router.patch('/positions/bulk', updateBulkPositions);
 router.put('/files/:id', updateTextContent); 
 router.delete('/:id', deleteItem);
 router.post("/share/:id", shareItem);
+router.get("/all", getAllItems);
 
 export default router;
