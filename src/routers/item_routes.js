@@ -6,6 +6,7 @@ const router = Router();
 router.use(verifyAuth);
 
 router.get("/desktop", getDesktop); 
+router.get("/all", getAllItems);
 router.get('/:id', getItemById);
 router.post("/", createItem); 
 router.post("/upload", uploadFileItem); 
@@ -15,6 +16,5 @@ router.patch('/positions/bulk', updateBulkPositions);
 router.put('/files/:id', updateTextContent); 
 router.delete('/:id', deleteItem);
 router.post("/share/:id", shareItem);
-router.get("/all", getAllItems);
 
 export default router;
