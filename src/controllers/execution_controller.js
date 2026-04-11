@@ -10,49 +10,76 @@ export const executeCode = async (req, res) => {
             return res.status(400).json({ ok: false, msg: "El código y el lenguaje son obligatorios" });
         }
 
-        // Generar un nombre de archivo único temporal
-        const fileName = `temp_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+        // 1. Crear carpeta temporal única
+        const execId = `run_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+        const execDir = path.join(process.cwd(), "uploads", execId);
         
-        // Usaremos la carpeta 'uploads' que ya tienes configurada en tu app
-        const uploadsDir = path.join(process.cwd(), "uploads");
-        
-        // Asegurarnos de que la carpeta existe
-        await fs.ensureDir(uploadsDir);
+        await fs.ensureDir(execDir);
 
         let filePath = "";
         let command = "";
+        const langStr = language.toLowerCase();
 
-        // Configurar el comando según el lenguaje
-        if (language.toLowerCase() === "javascript" || language.toLowerCase() === "js") {
-            filePath = path.join(uploadsDir, `${fileName}.js`);
-            // Nota las comillas dobles rodeando la variable de la ruta
-            command = `node "${filePath}"`; 
-        } else if (language.toLowerCase() === "python" || language.toLowerCase() === "py") {
-            filePath = path.join(uploadsDir, `${fileName}.py`);
-            command = `python "${filePath}"`; 
+        // 🌟 LA MAGIA MULTIPLATAFORMA 🌟
+        // Si es 'win32', estamos en tu PC local. Si no, asumimos que estamos en Render (Linux)
+        const isWindows = process.platform === "win32";
+
+        // 2. Configurar los comandos según el lenguaje
+        if (langStr === "javascript" || langStr === "js") {
+            filePath = path.join(execDir, "script.js");
+            await fs.writeFile(filePath, code);
+            
+            // Node funciona igual en Windows y Linux
+            command = `node "${filePath}"`;
+
+        } else if (langStr === "python" || langStr === "py") {
+            filePath = path.join(execDir, "script.py");
+            await fs.writeFile(filePath, code);
+            
+            // En Windows es "python", en Linux (Render) instalamos "python3"
+            const pythonCommand = isWindows ? "python" : "python3";
+            command = `${pythonCommand} "${filePath}"`;
+
+        } else if (langStr === "c++" || langStr === "cpp") {
+            filePath = path.join(execDir, "main.cpp");
+            await fs.writeFile(filePath, code);
+            
+            // En Windows el ejecutable necesita .exe, en Linux no
+            const outPath = path.join(execDir, isWindows ? "main.exe" : "main");
+            command = `g++ "${filePath}" -o "${outPath}" && "${outPath}"`;
+
+        } else if (langStr === "java") {
+            filePath = path.join(execDir, "Main.java");
+            await fs.writeFile(filePath, code);
+            
+            // Java funciona igual en ambos, pero debemos entrar a la carpeta primero
+            // javac compila el .java a .class, y java ejecuta el .class
+            command = `cd "${execDir}" && javac Main.java && java Main`;
+
         } else {
-            return res.status(400).json({ ok: false, msg: "Lenguaje no soportado. Usa 'javascript' o 'python'" });
+            // Lenguaje no soportado (Ej. HTML, CSS, JSON)
+            await fs.remove(execDir);
+            return res.status(400).json({ 
+                ok: false, 
+                msg: "Lenguaje no soportado por el compilador del servidor. Usa JS, Python, C++ o Java." 
+            });
         }
 
-        // 1. Guardar el código del usuario en el archivo físico
-        await fs.writeFile(filePath, code);
-
-        // 2. Ejecutar el archivo como un subproceso (con límite de 5 segundos)
-        exec(command, { timeout: 5000 }, async (error, stdout, stderr) => {
+        // 3. Ejecutar el subproceso (8 segundos máximo por si C++ o Java tardan compilando)
+        exec(command, { timeout: 8000 }, async (error, stdout, stderr) => {
             
-            // 3. Siempre borrar el archivo temporal al terminar (pase lo que pase)
-            await fs.unlink(filePath).catch(() => {});
+            // 4. Limpieza: Borrar siempre la carpeta temporal y su contenido
+            await fs.remove(execDir).catch(() => {});
 
-            // Si el código del usuario tiene errores de sintaxis o hace timeout
             if (error) {
                 return res.status(200).json({ 
                     ok: true, 
-                    output: stderr || "Error de ejecución o tiempo límite excedido (Timeout).",
+                    output: stderr || error.message || "Error de compilación o tiempo límite excedido.",
                     isError: true 
                 });
             }
 
-            // Si se ejecutó correctamente, enviamos la salida de la consola (stdout)
+            // Éxito: Devolver la consola
             return res.status(200).json({ 
                 ok: true, 
                 output: stdout,
