@@ -42,6 +42,15 @@ export const executeCode = async (req, res) => {
             const outPath = path.join(execDir, isWindows ? "main.exe" : "main");
             command = `g++ "${filePath}" -o "${outPath}" && "${outPath}"`;
 
+        } else if (langStr === "c") {
+            filePath = path.join(execDir, "main.c");
+            await fs.writeFile(filePath, code);
+            
+            // En Windows ponemos .exe, en Linux no
+            const outPath = path.join(execDir, isWindows ? "main.exe" : "main");
+            
+            // Usamos 'gcc' en lugar de 'g++'
+            command = `gcc "${filePath}" -o "${outPath}" && "${outPath}"`;
         } else {
             // Lenguaje no soportado (Ej. Java, HTML, CSS, JSON)
             await fs.remove(execDir);
