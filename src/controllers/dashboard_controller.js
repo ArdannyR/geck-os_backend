@@ -1,10 +1,10 @@
-import User from "../models/User.js"; 
+import User from "../models/User.js";
 import Workspace from "../models/Workspace.js";
 
 export const shareDesktopAccess = async (req, res) => {
     try {
         const ownerId = req.user._id;
-        const { email } = req.body; 
+        const { email } = req.body;
 
         if (!email) return res.status(400).json({ msg: "Debes ingresar un correo." });
 
@@ -16,18 +16,18 @@ export const shareDesktopAccess = async (req, res) => {
         }
 
         if (invitedUser.savedDesktops.includes(ownerId)) {
-            return res.status(200).json({ 
-                ok: true, 
-                msg: "El usuario ya tiene acceso a tu escritorio." 
+            return res.status(200).json({
+                ok: true,
+                msg: "El usuario ya tiene acceso a tu escritorio."
             });
         }
 
         invitedUser.savedDesktops.push(ownerId);
         await invitedUser.save();
-        
-        return res.status(200).json({ 
-            ok: true, 
-            msg: `Acceso concedido a ${invitedUser.name}` 
+
+        return res.status(200).json({
+            ok: true,
+            msg: `Acceso concedido a ${invitedUser.name}`
         });
 
     } catch (error) {
@@ -39,23 +39,23 @@ export const shareDesktopAccess = async (req, res) => {
 export const getDashboardInfo = async (req, res) => {
     try {
         const userId = req.user._id;
-        
+
         const userDB = await User.findById(userId)
-            .populate('savedDesktops', 'name email') 
-            .select('-password -token -emailConfirmed');
+            .populate("savedDesktops", "name email")
+            .select("-password -token -emailConfirmed");
 
         if (!userDB) return res.status(404).json({ msg: "Usuario no encontrado" });
 
-        const workspaces = await Workspace.find({ 
-            members: userId 
-        }).select('name owner members createdAt');
+        const workspaces = await Workspace.find({
+            members: userId
+        }).select("name owner members createdAt");
 
         const userDataForFrontend = {
             ...userDB.toObject(),
-            nombre: userDB.name, 
+            nombre: userDB.name,
             escritoriosGuardados: userDB.savedDesktops.map(desktop => ({
                 _id: desktop._id,
-                nombre: desktop.name, 
+                nombre: desktop.name,
                 email: desktop.email
             }))
         };
@@ -70,10 +70,10 @@ export const getDashboardInfo = async (req, res) => {
             createdAt: ws.createdAt
         }));
 
-        return res.status(200).json({ 
-            ok: true, 
-            usuario: userDataForFrontend, 
-            workspaces: workspacesForFrontend 
+        return res.status(200).json({
+            ok: true,
+            usuario: userDataForFrontend,
+            workspaces: workspacesForFrontend
         });
     } catch (error) {
         console.error("❌ Error en getDashboardInfo:", error);

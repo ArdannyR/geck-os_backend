@@ -1,12 +1,16 @@
 import User from "../models/User.js";
-import { uploadFileToCloudinary } from "../helpers/cloudinary.js"; 
+import Item from "../models/item.js";
+import Workspace from "../models/Workspace.js";
+import Recommendation from "../models/Recommendation.js";
+import { uploadFileToCloudinary } from "../helpers/cloudinary.js";
+import { v2 as cloudinary } from "cloudinary";
 import mongoose from "mongoose";
 
 export const getProfile = (req, res) => {
-    const user = req.user; // 💡 Actualizado
-    
+    const user = req.user;
+
     const { token, emailConfirmed, createdAt, updatedAt, __v, password, ...profileData } = user.toObject ? user.toObject() : user;
-    
+
     profileData.nombre = profileData.name;
     delete profileData.name;
 
@@ -15,7 +19,7 @@ export const getProfile = (req, res) => {
 
 export const updatePassword = async (req, res) => {
     try {
-        const userId = req.user._id; // 💡 Actualizado
+        const userId = req.user._id;
         const { passwordactual, passwordnuevo } = req.body;
 
         if (!passwordactual || !passwordnuevo) {
@@ -40,11 +44,11 @@ export const updatePassword = async (req, res) => {
 export const updateProfile = async (req, res) => {
     try {
         const { id } = req.params;
-        const { nombre, name, email } = req.body; 
+        const { nombre, name, email } = req.body;
         const finalName = nombre || name;
 
         if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ msg: `ID inválido: ${id}` });
-        
+
         const userDB = await User.findById(id);
         if (!userDB) return res.status(404).json({ msg: `No existe el usuario con ID ${id}` });
 
@@ -70,8 +74,8 @@ export const updateProfile = async (req, res) => {
 
 export const updatePreferences = async (req, res) => {
     try {
-        const userId = req.user._id; // 💡 Actualizado
-        const { theme, wallpaperUrl, accent } = req.body; // ;)
+        const userId = req.user._id;
+        const { theme, wallpaperUrl, accent } = req.body;
 
         if (theme && !["light", "dark"].includes(theme)) {
             return res.status(400).json({ ok: false, msg: "Theme inválido (light/dark)" });
@@ -80,7 +84,7 @@ export const updatePreferences = async (req, res) => {
         const userDB = await User.findById(userId);
         if (!userDB) return res.status(404).json({ ok: false, msg: "Usuario no encontrado" });
         if (theme) userDB.preferences.theme = theme;
-        if (accent) userDB.preferences.accent = accent; // ;)
+        if (accent) userDB.preferences.accent = accent;
         if (wallpaperUrl !== undefined) userDB.preferences.wallpaperUrl = wallpaperUrl;
 
         await userDB.save();
@@ -89,7 +93,7 @@ export const updatePreferences = async (req, res) => {
         if (io) {
             io.to(`user:${userId}`).emit("preferences-updated", {
                 theme: userDB.preferences.theme,
-                accent: userDB.preferences.accent, // ;)
+                accent: userDB.preferences.accent,
                 wallpaperUrl: userDB.preferences.wallpaperUrl
             });
         }
@@ -103,7 +107,7 @@ export const updatePreferences = async (req, res) => {
 
 export const updateImage = async (req, res) => {
     try {
-        const userId = req.user._id; // 💡 Actualizado
+        const userId = req.user._id;
 
         if (!req.files || !req.files.image) {
             return res.status(400).json({ ok: false, msg: "Debes enviar un archivo en el campo 'image'" });
@@ -115,7 +119,6 @@ export const updateImage = async (req, res) => {
             return res.status(400).json({ ok: false, msg: "Error al procesar el archivo temporal" });
         }
 
-        // 💡 Usando el nuevo helper de Cloudinary
         const { secure_url, public_id } = await uploadFileToCloudinary(file.tempFilePath, "VirtualDesk");
 
         const userDB = await User.findByIdAndUpdate(
@@ -138,61 +141,65 @@ export const updateImage = async (req, res) => {
 };
 
 export const deleteAccount = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
         const userId = req.user._id;
-        // 1. Recibimos el texto que el usuario escribió en el frontend
-        const { confirmationText } = req.body; 
+        const { confirmationText } = req.body;
 
-        // 2. Construimos cómo DEBERÍA verse el texto (ej. "delete_Arda")
-        // Usamos req.user.name porque tu middleware de Auth ya te trae los datos del usuario
-        // Le quitamos los espacios en blanco por si su nombre es "Juan Perez" -> "delete_JuanPerez"
-        const formattedName = req.user.name.replace(/\s+/g, '');
+        const formattedName = req.user.name.replace(/\s+/g, "");
         const expectedText = `delete_${formattedName}`;
 
-        // 3. Validamos si el texto coincide (Case-sensitive)
         if (!confirmationText || confirmationText !== expectedText) {
-            return res.status(400).json({ 
-                ok: false, 
-                msg: `Confirmación incorrecta. Debes escribir exactamente: ${expectedText}` 
-            });
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(400).json({ ok: false, msg: `Confirmación incorrecta. Esperado: ${expectedText}` });
         }
 
-        // Eliminacion completa
-        const userFiles = await Item.find({ userId, publicId: { $ne: null } });
+        const userFiles = await Item.find({ userId, publicId: { $ne: null } }).session(session);
         for (const file of userFiles) {
             await cloudinary.uploader.destroy(file.publicId).catch(() => {});
         }
 
-        await Item.deleteMany({ userId });
+        await Item.deleteMany({ userId }).session(session);
 
         await Item.updateMany(
-            {}, 
-            { 
-                $pull: { 
+            {},
+            {
+                $pull: {
                     sharedWith: { userId: userId },
                     guestPositions: { userId: userId }
-                } 
-            }
+                }
+            },
+            { session }
         );
 
-        await Workspace.deleteMany({ owner: userId });
+        await Workspace.deleteMany({ owner: userId }).session(session);
         await Workspace.updateMany(
-            { members: userId }, 
-            { $pull: { members: userId } }
+            { members: userId },
+            { $pull: { members: userId } },
+            { session }
         );
 
-        await Recommendation.deleteMany({ userId });
+        await Recommendation.deleteMany({ userId }).session(session);
 
         await User.updateMany(
             { savedDesktops: userId },
-            { $pull: { savedDesktops: userId } }
+            { $pull: { savedDesktops: userId } },
+            { session }
         );
 
-        await User.findByIdAndDelete(userId);
+        await User.findByIdAndDelete(userId).session(session);
+
+        await session.commitTransaction();
+        session.endSession();
 
         return res.status(200).json({ ok: true, msg: "Tu cuenta y todos tus datos han sido eliminados correctamente." });
 
     } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
         console.error("❌ Error en deleteAccount:", error);
         return res.status(500).json({ ok: false, msg: "Hubo un error al intentar eliminar la cuenta." });
     }

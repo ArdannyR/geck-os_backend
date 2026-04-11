@@ -9,7 +9,7 @@ const connection = async () => {
         console.log(`✅ Base de datos conectada en ${connection.host} - puerto ${connection.port}`);
     } catch (error) {
         console.error("❌ Error conectando a MongoDB:", error.message);
-        process.exit(1); 
+        process.exit(1);
     }
 };
 

@@ -1,11 +1,11 @@
 import Workspace from "../models/Workspace.js";
-import User from "../models/User.js"; 
+import User from "../models/User.js";
 
 export const createWorkspace = async (req, res) => {
     try {
-        const userId = req.user._id; 
+        const userId = req.user._id;
         const { nombre, name } = req.body;
-        
+
         const finalName = nombre || name;
 
         if (!finalName) return res.status(400).json({ ok: false, msg: "El nombre es obligatorio" });
@@ -13,15 +13,15 @@ export const createWorkspace = async (req, res) => {
         const newWorkspace = new Workspace({
             name: finalName,
             owner: userId,
-            members: [userId] 
+            members: [userId]
         });
 
         await newWorkspace.save();
 
-        return res.status(201).json({ 
-            ok: true, 
-            msg: "Espacio de trabajo creado", 
-            workspace: newWorkspace 
+        return res.status(201).json({
+            ok: true,
+            msg: "Espacio de trabajo creado",
+            workspace: newWorkspace
         });
 
     } catch (error) {
@@ -55,9 +55,9 @@ export const inviteMember = async (req, res) => {
         workspace.members.push(invitedUser._id);
         await workspace.save();
 
-        return res.status(200).json({ 
-            ok: true, 
-            msg: `Se añadió a ${invitedUser.name} al equipo.` 
+        return res.status(200).json({
+            ok: true,
+            msg: `Se añadió a ${invitedUser.name} al equipo.`
         });
 
     } catch (error) {

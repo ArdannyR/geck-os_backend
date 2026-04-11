@@ -1,6 +1,6 @@
-import { Router } from 'express';
-import { createWorkspace, inviteMember } from '../controllers/workspace_controller.js';
-import { verifyAuth } from '../middlewares/auth.js';
+import { Router } from "express";
+import { createWorkspace, inviteMember } from "../controllers/workspace_controller.js";
+import { verifyAuth } from "../middlewares/auth.js";
 
 const router = Router();
 router.use(verifyAuth);

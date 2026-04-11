@@ -1,13 +1,13 @@
-import nodemailer from "nodemailer"
-import Transport from "nodemailer-brevo-transport" 
-import dotenv from "dotenv"
-dotenv.config()
+import nodemailer from "nodemailer";
+import Transport from "nodemailer-brevo-transport";
+import dotenv from "dotenv";
+dotenv.config();
 
 const transporter = nodemailer.createTransport(
     new Transport({
-        apiKey: process.env.BREVO_API_KEY 
+        apiKey: process.env.BREVO_API_KEY
     })
-)
+);
 
 transporter.verify(function (error, success) {
     if (error) {
@@ -17,26 +17,19 @@ transporter.verify(function (error, success) {
     }
 });
 
-/**
- * Función genérica para enviar correos
- * @param {string} to - Email del destinatario
- * @param {string} subject - Asunto del correo
- * @param {string} html - Contenido HTML del correo
- */
 const sendMail = async (to, subject, html) => {
-
     try {
         const info = await transporter.sendMail({
-            from: `"VirtualDesk" <${process.env.USER_MAILTRAP}>`, 
+            from: `"VirtualDesk" <${process.env.USER_MAILTRAP}>`,
             to,
             subject,
             html,
-        })
-        console.log("✅ Email enviado ID:", info.messageId)
+        });
+        console.log("✅ Email enviado ID:", info.messageId);
 
     } catch (error) {
-        console.error("❌ Error enviando email:", error.message)
+        console.error("❌ Error enviando email:", error.message);
     }
-}
+};
 
-export default sendMail
+export default sendMail;

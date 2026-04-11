@@ -1,11 +1,12 @@
 import Item from "../models/item.js";
-import User from "../models/User.js"; 
+import User from "../models/User.js";
 import Workspace from "../models/Workspace.js";
-import { uploadFileToCloudinary } from "../helpers/cloudinary.js"; 
+import mongoose from "mongoose";
+import { uploadFileToCloudinary } from "../helpers/cloudinary.js";
 
 export const getDesktop = async (req, res) => {
     try {
-        const myId = req.user._id; // 💡 Actualizado
+        const myId = req.user._id;
         let { remoteUserId, folderId, workspaceId } = req.query;
 
         if (workspaceId && workspaceId !== "null" && workspaceId !== "undefined") {
@@ -49,8 +50,8 @@ export const getDesktop = async (req, res) => {
         if (!isRemoteMode && (!folderId || folderId === "null" || folderId === "undefined")) {
             items = await Item.find({
                 $or: [
-                    query, 
-                    { "sharedWith.userId": myId } 
+                    query,
+                    { "sharedWith.userId": myId }
                 ]
             }).lean();
         } else {
@@ -67,12 +68,12 @@ export const getDesktop = async (req, res) => {
             });
         }
 
-        const ownerSettings = await User.findById(targetUserId).select('preferences');
+        const ownerSettings = await User.findById(targetUserId).select("preferences");
 
-        return res.status(200).json({ 
-            ok: true, 
+        return res.status(200).json({
+            ok: true,
             items,
-            preferences: ownerSettings?.preferences 
+            preferences: ownerSettings?.preferences
         });
 
     } catch (error) {
@@ -83,7 +84,7 @@ export const getDesktop = async (req, res) => {
 
 export const createItem = async (req, res) => {
     try {
-        const userId = req.user._id; 
+        const userId = req.user._id;
         const { type, name, url, parentId, x, y, workspaceId } = req.body;
 
         if (!type || !name) return res.status(400).json({ ok: false, msg: "Tipo y nombre son obligatorios" });
@@ -121,7 +122,7 @@ export const createItem = async (req, res) => {
 
 export const uploadFileItem = async (req, res) => {
     try {
-        const userId = req.user._id; // 💡 Actualizado
+        const userId = req.user._id;
         const { parentId, x, y, workspaceId } = req.body;
 
         if (!req.files || !req.files.archivo) {
@@ -129,8 +130,7 @@ export const uploadFileItem = async (req, res) => {
         }
 
         const file = req.files.archivo;
-        
-        // 💡 Usando el nuevo helper de Cloudinary
+
         const cloudData = await uploadFileToCloudinary(file.tempFilePath, "VirtualDesk_Docs");
 
         const newItem = new Item({
@@ -138,7 +138,7 @@ export const uploadFileItem = async (req, res) => {
             type: "file",
             name: file.name,
             url: cloudData.secure_url,
-            fileFormat: cloudData.format || file.name.split('.').pop(),
+            fileFormat: cloudData.format || file.name.split(".").pop(),
             publicId: cloudData.public_id,
             parentId: (parentId && parentId !== "null") ? parentId : null,
             position: { x: Number(x) || 100, y: Number(y) || 100 },
@@ -172,7 +172,7 @@ export const getItemById = async (req, res) => {
 
 export const renameItem = async (req, res) => {
     try {
-        const userId = req.user._id; // 💡 Actualizado
+        const userId = req.user._id;
         const { id } = req.params;
         const { name } = req.body;
 
@@ -203,7 +203,7 @@ export const renameItem = async (req, res) => {
 
 export const moveItem = async (req, res) => {
     try {
-        const userId = req.user._id; // 💡 Actualizado
+        const userId = req.user._id;
         const { id } = req.params;
         const { x, y } = req.body;
 
@@ -239,8 +239,8 @@ export const moveItem = async (req, res) => {
 
 export const updateBulkPositions = async (req, res) => {
     try {
-        const userId = req.user._id; // 💡 Actualizado
-        const { items } = req.body; 
+        const userId = req.user._id;
+        const { items } = req.body;
 
         if (!items || !Array.isArray(items)) return res.status(400).json({ ok: false, msg: "Formato de datos incorrecto" });
 
@@ -261,7 +261,7 @@ export const updateBulkPositions = async (req, res) => {
 
 export const updateTextContent = async (req, res) => {
     try {
-        const userId = req.user._id; // 💡 Actualizado
+        const userId = req.user._id;
         const { id } = req.params;
         const { content } = req.body;
 
@@ -288,12 +288,19 @@ export const updateTextContent = async (req, res) => {
 };
 
 export const deleteItem = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
-        const userId = req.user._id; // 💡 Actualizado
+        const userId = req.user._id;
         const { id } = req.params;
 
-        const root = await Item.findOne({ _id: id, userId }).lean();
-        if (!root) return res.status(404).json({ ok: false, msg: "No existe este ítem o no pertenece al usuario" });
+        const root = await Item.findOne({ _id: id, userId }).session(session).lean();
+        if (!root) {
+            await session.abortTransaction();
+            session.endSession();
+            return res.status(404).json({ ok: false, msg: "No existe este ítem o no pertenece al usuario" });
+        }
 
         const toDelete = new Set([String(id)]);
         const queue = [id];
@@ -301,10 +308,14 @@ export const deleteItem = async (req, res) => {
 
         while (queue.length) {
             guard++;
-            if (guard > 5000) return res.status(400).json({ ok: false, msg: "Árbol demasiado grande o ciclo detectado" });
+            if (guard > 5000) {
+                await session.abortTransaction();
+                session.endSession();
+                return res.status(400).json({ ok: false, msg: "Árbol demasiado grande o ciclo detectado" });
+            }
 
             const parentId = queue.shift();
-            const children = await Item.find({ parentId, userId }).select("_id").lean();
+            const children = await Item.find({ parentId, userId }).session(session).select("_id").lean();
             for (const ch of children) {
                 const chId = String(ch._id);
                 if (!toDelete.has(chId)) {
@@ -315,7 +326,10 @@ export const deleteItem = async (req, res) => {
         }
 
         const idsArray = Array.from(toDelete);
-        await Item.deleteMany({ _id: { $in: idsArray }, userId });
+        await Item.deleteMany({ _id: { $in: idsArray }, userId }).session(session);
+
+        await session.commitTransaction();
+        session.endSession();
 
         const io = req.app.get("io");
         if (io) {
@@ -327,13 +341,15 @@ export const deleteItem = async (req, res) => {
 
         return res.status(200).json({ ok: true, msg: "Ítem eliminado correctamente", deleted: idsArray.length });
     } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
         return res.status(500).json({ ok: false, msg: `Error en el servidor - ${error.message}` });
     }
 };
 
 export const shareItem = async (req, res) => {
     try {
-        const ownerId = req.user._id; // 💡 Actualizado
+        const ownerId = req.user._id;
         const { id } = req.params;
         const { email, permission } = req.body;
 
@@ -374,9 +390,9 @@ export const getAllItems = async (req, res) => {
             ]
         }).lean();
 
-        return res.status(200).json({ 
-            ok: true, 
-            items 
+        return res.status(200).json({
+            ok: true,
+            items
         });
 
     } catch (error) {

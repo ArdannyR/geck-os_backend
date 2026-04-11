@@ -1,4 +1,4 @@
-import sendMail from "../config/nodemailer.js"; // Asegúrate de que este archivo exista
+import sendMail from "../config/nodemailer.js";
 
 export const sendRegistrationEmail = (userMail, token) => {
     return sendMail(

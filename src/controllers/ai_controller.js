@@ -1,7 +1,7 @@
 import axios from "axios";
-import User from "../models/User.js"; 
-import Recommendation from "../models/Recommendation.js"; 
-import { uploadBase64ToCloudinary } from "../helpers/cloudinary.js"; 
+import User from "../models/User.js";
+import Recommendation from "../models/Recommendation.js";
+import { uploadBase64ToCloudinary } from "../helpers/cloudinary.js";
 
 export const chatWithAssistant = async (req, res) => {
     try {
@@ -11,16 +11,16 @@ export const chatWithAssistant = async (req, res) => {
             return res.status(400).json({ ok: false, msg: "El mensaje es obligatorio" });
         }
 
-        const pythonUrl = `${process.env.PYTHON_MICROSERVICE_URL}/chat`; 
+        const pythonUrl = `${process.env.PYTHON_MICROSERVICE_URL}/chat`;
 
         const response = await axios.post(
-            pythonUrl, 
+            pythonUrl,
             { mensaje },
             { timeout: 120000 }
         );
         return res.status(200).json({
             ok: true,
-            data: response.data.respuesta 
+            data: response.data.respuesta
         });
 
     } catch (error) {
@@ -31,7 +31,7 @@ export const chatWithAssistant = async (req, res) => {
 
 export const generateWallpaper = async (req, res) => {
     try {
-        const userId = req.user._id; 
+        const userId = req.user._id;
         const { prompt } = req.body;
 
         if (!prompt) return res.status(400).json({ ok: false, msg: "El prompt es obligatorio" });
@@ -60,19 +60,20 @@ export const generateWallpaper = async (req, res) => {
 
         const io = req.app.get("io");
         if (io) {
-            io.to(`user:${userId}`).emit("preferences-updated", { 
+            io.to(`user:${userId}`).emit("preferences-updated", {
                 theme: "light",
-                wallpaperUrl: secure_url 
+                wallpaperUrl: secure_url
             });
         }
 
         return res.status(200).json({ ok: true, msg: "Fondo generado con éxito", url: secure_url });
 
     } catch (error) {
-        console.error("❌ Error en generateWallpaper:", error.message); 
+        console.error("❌ Error en generateWallpaper:", error.message);
         return res.status(500).json({ ok: false, msg: "Error al generar imagen mediante el microservicio" });
     }
 };
+
 export const semanticSearch = async (req, res) => {
     try {
         const { consulta, archivos } = req.body;
@@ -98,7 +99,7 @@ export const semanticSearch = async (req, res) => {
 
 export const getRecommendations = async (req, res) => {
     try {
-        const userId = req.user._id; 
+        const userId = req.user._id;
 
         const recs = await Recommendation.find({ userId })
             .sort({ createdAt: -1 })
@@ -114,4 +115,4 @@ export const getRecommendations = async (req, res) => {
 
 export const improveText = async (req, res) => {
     res.status(200).json({ ok: true, msg: "Función de mejora de texto aún no implementada" });
-}
+};

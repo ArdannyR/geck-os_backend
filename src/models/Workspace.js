@@ -2,19 +2,19 @@ import mongoose from "mongoose";
 
 const workspaceSchema = new mongoose.Schema(
     {
-        name: { 
+        name: {
             type: String,
             required: true,
             trim: true
         },
-        owner: { 
+        owner: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'User', 
+            ref: "User",
             required: true
         },
-        members: [{ 
+        members: [{
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'User'
+            ref: "User"
         }]
     },
     {
