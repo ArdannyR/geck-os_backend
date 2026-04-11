@@ -54,7 +54,7 @@ export const executeCode = async (req, res) => {
             
             // Java funciona igual en ambos, pero debemos entrar a la carpeta primero
             // javac compila el .java a .class, y java ejecuta el .class
-            command = `cd "${execDir}" && javac Main.java && java Main`;
+            command = `cd "${execDir}" && javac -encoding UTF-8 Main.java && java Main`;
 
         } else {
             // Lenguaje no soportado (Ej. HTML, CSS, JSON)
