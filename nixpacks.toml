@@ -1,2 +1,0 @@
-[phases.setup]
-aptPkgs = ["...", "g++", "default-jdk", "python3"]
