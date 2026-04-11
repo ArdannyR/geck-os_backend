@@ -28,40 +28,26 @@ export const executeCode = async (req, res) => {
         if (langStr === "javascript" || langStr === "js") {
             filePath = path.join(execDir, "script.js");
             await fs.writeFile(filePath, code);
-            
-            // Node funciona igual en Windows y Linux
             command = `node "${filePath}"`;
 
         } else if (langStr === "python" || langStr === "py") {
             filePath = path.join(execDir, "script.py");
             await fs.writeFile(filePath, code);
-            
-            // En Windows es "python", en Linux (Render) instalamos "python3"
             const pythonCommand = isWindows ? "python" : "python3";
             command = `${pythonCommand} "${filePath}"`;
 
         } else if (langStr === "c++" || langStr === "cpp") {
             filePath = path.join(execDir, "main.cpp");
             await fs.writeFile(filePath, code);
-            
-            // En Windows el ejecutable necesita .exe, en Linux no
             const outPath = path.join(execDir, isWindows ? "main.exe" : "main");
             command = `g++ "${filePath}" -o "${outPath}" && "${outPath}"`;
 
-        } else if (langStr === "java") {
-            filePath = path.join(execDir, "Main.java");
-            await fs.writeFile(filePath, code);
-            
-            // Java funciona igual en ambos, pero debemos entrar a la carpeta primero
-            // javac compila el .java a .class, y java ejecuta el .class
-            command = `cd "${execDir}" && javac -encoding UTF-8 Main.java && java Main`;
-
         } else {
-            // Lenguaje no soportado (Ej. HTML, CSS, JSON)
+            // Lenguaje no soportado (Ej. Java, HTML, CSS, JSON)
             await fs.remove(execDir);
             return res.status(400).json({ 
                 ok: false, 
-                msg: "Lenguaje no soportado por el compilador del servidor. Usa JS, Python, C++ o Java." 
+                msg: "Lenguaje no soportado por el servidor. Usa JS, Python o C++." 
             });
         }
 
