@@ -204,3 +204,27 @@ export const deleteAccount = async (req, res) => {
         return res.status(500).json({ ok: false, msg: "Hubo un error al intentar eliminar la cuenta." });
     }
 };
+
+export const searchUsers = async (req, res) => {
+    try {
+        const { q } = req.query;
+        
+        if (!q || q.length < 2) {
+            return res.status(200).json({ ok: true, users: [] });
+        }
+
+        const users = await User.find({
+            $or: [
+                { email: { $regex: q, $options: "i" } },
+                { name: { $regex: q, $options: "i" } }
+            ]
+        })
+        .select("name email _id") 
+        .limit(5);
+
+        return res.status(200).json({ ok: true, users });
+    } catch (error) {
+        console.error("❌ Error en searchUsers:", error);
+        return res.status(500).json({ ok: false, msg: "Error al buscar usuarios" });
+    }
+};
