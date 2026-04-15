@@ -7,10 +7,10 @@ router.use(verifyAuth);
 
 router.get("/profile", getProfile);
 router.put("/update-password", updatePassword);
-router.put("/profile/:id", updateProfile);
 router.patch("/preferences", updatePreferences);
 router.post("/update-image", updateImage);
 router.get("/search", searchUsers);
 router.delete("/delete-account", deleteAccount);
+router.put("/profile/:id", updateProfile);
 
 export default router;
