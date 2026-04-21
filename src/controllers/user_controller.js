@@ -1,7 +1,6 @@
 import User from "../models/User.js";
 import Item from "../models/item.js";
 import Workspace from "../models/Workspace.js";
-import Recommendation from "../models/Recommendation.js";
 import { uploadFileToCloudinary } from "../helpers/cloudinary.js";
 import { v2 as cloudinary } from "cloudinary";
 import mongoose from "mongoose";
@@ -181,8 +180,6 @@ export const deleteAccount = async (req, res) => {
             { $pull: { members: userId } },
             { session }
         );
-
-        await Recommendation.deleteMany({ userId }).session(session);
 
         await User.updateMany(
             { savedDesktops: userId },

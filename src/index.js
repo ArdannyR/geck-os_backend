@@ -3,12 +3,9 @@ import connection from "./database.js";
 import http from "http";
 import rateLimit from "express-rate-limit";
 import { Server } from "socket.io";
-import { startRecommendationsCron } from "./jobs/recommendations_cron.js";
 
 const startServer = async () => {
     await connection();
-
-    startRecommendationsCron();
 
     const server = http.createServer(app);
     const io = new Server(server, { cors: { origin: "*" } });

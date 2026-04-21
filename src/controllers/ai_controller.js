@@ -1,6 +1,5 @@
 import axios from "axios";
 import User from "../models/User.js";
-import Recommendation from "../models/Recommendation.js";
 import Item from "../models/item.js";
 import { uploadBase64ToCloudinary } from "../helpers/cloudinary.js";
 
@@ -132,22 +131,6 @@ export const semanticSearch = async (req, res) => {
             ok: false, 
             msg: "Fallo al realizar la búsqueda semántica" 
         });
-    }
-};
-
-export const getRecommendations = async (req, res) => {
-    try {
-        const userId = req.user._id;
-
-        const recs = await Recommendation.find({ userId })
-            .sort({ createdAt: -1 })
-            .limit(30)
-            .lean();
-
-        return res.status(200).json({ ok: true, recommendations: recs });
-    } catch (error) {
-        console.error("❌ Error en getRecommendations:", error);
-        return res.status(500).json({ ok: false, msg: "Error en el servidor" });
     }
 };
 
