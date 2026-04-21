@@ -6,7 +6,7 @@ import { Server } from "socket.io";
 
 const startServer = async () => {
     await connection();
-
+    
     const server = http.createServer(app);
     const io = new Server(server, { cors: { origin: "*" } });
 
@@ -38,7 +38,7 @@ const startServer = async () => {
         });
     });
 
-    server.listen(app.get("port"), () => {
+    server.listen(app.get("port"), "0.0.0.0", () => { // server.listen(app.get("port"), () => {
         console.log(`🚀 Servidor corriendo en http://localhost:${app.get("port")}`);
     });
 };
