@@ -14,6 +14,7 @@ import workspaceRoutes from "./routers/workspace_routes.js";
 import dashboardRoutes from "./routers/dashboard_routes.js";
 import paymentRoutes from "./routers/payment_routes.js";
 import executionRoutes from "./routers/execution_routes.js";
+import chatRoutes from "./routers/chat_routes.js";
 
 const app = express();
 dotenv.config();
@@ -44,6 +45,7 @@ app.use("/api/workspaces", workspaceRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/execute", executionRoutes);
+app.use("/api/chat", chatRoutes);
 
 app.use((req, res) => {
     console.log(`❌ 404 - Ruta no encontrada: ${req.method} ${req.originalUrl}`);

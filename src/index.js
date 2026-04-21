@@ -2,6 +2,7 @@ import app from "./app.js";
 import connection from "./database.js";
 import http from "http";
 import rateLimit from "express-rate-limit";
+import Message from "./models/Message.js";
 import { Server } from "socket.io";
 
 const startServer = async () => {
@@ -33,9 +34,29 @@ const startServer = async () => {
         socket.on("file-change", (p) => socket.to(`user:${p.userId}`).emit("file-change", { fileId: p.fileId, content: p.content }));
         socket.on("code-change", (p) => socket.to(`user:${p.userId}`).emit("code-change", { content: p.content, language: p.language }));
 
+        socket.on("send-message", async (data) => {
+         try {
+             const newMessage = await Message.create({
+                 sender: data.senderId,
+                 receiver: data.receiverId,
+                 text: data.text
+             });
+             socket.to(`user:${data.receiverId}`).emit("receive-message", {
+                 _id: newMessage._id,
+                 sender: newMessage.sender,
+                 text: newMessage.text,
+                 createdAt: newMessage.createdAt
+             });
+
+         } catch (error) {
+             console.error("❌ Error al procesar mensaje de chat:", error);
+         }
+        });
+
         socket.on("disconnect", () => {
             console.log("❌ Socket desconectado:", socket.id);
         });
+
     });
 
     server.listen(app.get("port"), "0.0.0.0", () => { // server.listen(app.get("port"), () => {
