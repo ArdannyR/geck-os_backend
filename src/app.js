@@ -3,8 +3,6 @@ import dotenv from "dotenv";
 import cors from "cors";
 import { v2 as cloudinary } from "cloudinary";
 import fileUpload from "express-fileupload";
-import passport from "passport";
-import "./config/passport.js";
 
 import authRoutes from "./routers/auth_routes.js";
 import userRoutes from "./routers/user_routes.js";
@@ -33,7 +31,6 @@ app.use(fileUpload({
     useTempFiles: true,
     tempFileDir: "./uploads"
 }));
-app.use(passport.initialize());
 
 app.get("/", (req, res) => res.send("🚀 Server Deck-os on"));
 

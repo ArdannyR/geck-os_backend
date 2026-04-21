@@ -21,13 +21,13 @@
     "express-fileupload": "^1.5.2",
     "express-rate-limit": "^8.3.2",
     "fs-extra": "^11.3.2",
+    "google-auth-library": "^10.6.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.19.2",
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.10",
     "nodemailer-brevo-transport": "^2.2.1",
     "passport": "^0.7.0",
-    "passport-google-oauth20": "^2.0.0",
     "socket.io": "^4.8.1",
     "stripe": "^19.1.0"
   }
