@@ -51,10 +51,7 @@ const userSchema = new mongoose.Schema(
                 default: null
             }
         },
-        googleId: {
-            type: String,
-            default: null
-        },
+        
         savedDesktops: [{
             type: mongoose.Schema.Types.ObjectId,
             ref: "User"

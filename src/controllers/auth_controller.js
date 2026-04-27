@@ -1,9 +1,7 @@
 import User from "../models/User.js";
 import { sendRegistrationEmail, sendPasswordRecoveryEmail } from "../helpers/mail.js";
 import { createJWT } from "../helpers/jwt.js";
-import { OAuth2Client } from "google-auth-library";
 
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 
 export const registerUser = async (req, res) => {
@@ -159,50 +157,3 @@ export const loginUser = async (req, res) => {
     }
 };
 
-export const googleLogin = async (req, res) => {
-    try {
-        const { idToken } = req.body; 
-
-        if (!idToken) {
-            return res.status(400).json({ msg: "Se requiere el idToken de Google" });
-        }
-
-        const ticket = await client.verifyIdToken({
-            idToken,
-            audience: process.env.GOOGLE_CLIENT_ID,  
-        });
-
-        const payload = ticket.getPayload();
-        const { sub: googleId, email, name } = payload; 
-
-        let user = await User.findOne({ email });
-
-        if (!user) {
-            user = new User({
-                name,
-                email,
-                googleId,
-                emailConfirmed: true
-            });
-            await user.save();
-        } else if (!user.googleId) {
-            user.googleId = googleId;
-            user.emailConfirmed = true; 
-            await user.save();
-        }
-        const token = createJWT(user._id, user.role);
-
-        return res.status(200).json({
-            ok: true,
-            token,
-            nombre: user.name,
-            rol: user.role,
-            _id: user._id,
-            email: user.email
-        });
-
-    } catch (error) {
-        console.error("Error validando token de Google:", error);
-        return res.status(401).json({ msg: "Token de Google inválido" });
-    }
-};
