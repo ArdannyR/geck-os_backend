@@ -12,16 +12,17 @@ export const chatWithAssistant = async (req, res) => {
         }
 
         const pythonUrl = `${process.env.PYTHON_MICROSERVICE_URL}/chat`;
-        console.log("👉 Intentando conectar con Python en:", pythonUrl);
-
+        
         const response = await axios.post(
             pythonUrl,
-            { mensaje },
+            { mensaje }, // El microservicio espera { mensaje: "..." }
             { timeout: 120000 }
         );
+
+        // Retornamos el objeto 'respuesta' completo que contiene: mensaje, comando, apps
         return res.status(200).json({
             ok: true,
-            data: response.data.respuesta
+            data: response.data.respuesta 
         });
 
     } catch (error) {
@@ -37,23 +38,20 @@ export const generateWallpaper = async (req, res) => {
 
         if (!prompt) return res.status(400).json({ ok: false, msg: "El prompt es obligatorio" });
 
-        console.log(`🎨 Solicitando fondo al microservicio para: "${prompt}"`);
-
         const pythonUrl = `${process.env.PYTHON_MICROSERVICE_URL}/generar-fondo`;
-        console.log("👉 Intentando conectar con Python en:", pythonUrl);
 
         const response = await axios.post(
             pythonUrl,
-            { descripcion: prompt },
+            { descripcion: prompt }, // Python espera 'descripcion'
             { timeout: 120000 }
         );
+        
         const base64Image = response.data.imagen;
 
         if (!base64Image) {
-            return res.status(500).json({ ok: false, msg: "El microservicio no devolvió la imagen correctamente" });
+            return res.status(500).json({ ok: false, msg: "La IA no devolvió la imagen" });
         }
 
-        console.log("☁️ Subiendo a Cloudinary...");
         const secure_url = await uploadBase64ToCloudinary(base64Image, "VirtualDesk_Wallpapers");
 
         await User.findByIdAndUpdate(userId, {
@@ -72,44 +70,37 @@ export const generateWallpaper = async (req, res) => {
 
     } catch (error) {
         console.error("❌ Error en generateWallpaper:", error.message);
-        return res.status(500).json({ ok: false, msg: "Error al generar imagen mediante el microservicio" });
+        return res.status(500).json({ ok: false, msg: "Error al generar imagen mediante la IA" });
     }
 };
 
 export const semanticSearch = async (req, res) => {
     try {
         const { consulta } = req.body; 
-        const userId = req.user._id; // Corregido a _id para coincidir con tu auth
+        const userId = req.user._id;
 
         if (!consulta) {
             return res.status(400).json({ ok: false, msg: "La consulta es obligatoria" });
         }
 
-        // 1. Buscamos todos los ítems del usuario
         const items = await Item.find({ 
-            user: userId, 
-            deletedAt: null 
+            userId: userId, 
+            type: { $in: ["note", "code", "file"] } // Filtrar por tipos con contenido
         });
 
         if (!items || items.length === 0) {
-            return res.status(200).json({
-                ok: true,
-                msg: "No se encontraron archivos para buscar",
-                data: [] 
-            });
+            return res.status(200).json({ ok: true, data: [] });
         }
 
-        // 2. Mapeamos los datos para Python
         const archivosParaIA = items.map(item => ({
             id: item._id.toString(),
             nombre: item.name,
+            // Aseguramos que 'contenido' no sea null para el modelo de IA
             contenido: item.content || `Archivo tipo ${item.type} llamado ${item.name}`
         }));
 
         const pythonUrl = `${process.env.PYTHON_MICROSERVICE_URL}/buscar`;
-        console.log("👉 Intentando conectar con Python en:", pythonUrl);
 
-        // 3. Consumimos el microservicio
         const response = await axios.post(
             pythonUrl, 
             {
@@ -119,21 +110,40 @@ export const semanticSearch = async (req, res) => {
             { timeout: 120000 }
         );
 
-        // 4. Retornamos con la misma estructura que chatWithAssistant
         return res.status(200).json({
             ok: true,
-            data: response.data.resultados // Tu IA en Python devuelve "resultados"
+            data: response.data.resultados // 'resultados' es el campo que usa Python
         });
 
     } catch (error) {
         console.error("❌ Error en semanticSearch:", error.message);
-        return res.status(500).json({ 
-            ok: false, 
-            msg: "Fallo al realizar la búsqueda semántica" 
-        });
+        return res.status(500).json({ ok: false, msg: "Fallo al realizar la búsqueda semántica" });
     }
 };
 
 export const improveText = async (req, res) => {
-    res.status(200).json({ ok: true, msg: "Función de mejora de texto aún no implementada" });
+    try {
+        const { texto, accion } = req.body; 
+
+        if (!texto || !accion) {
+            return res.status(400).json({ ok: false, msg: "Texto y acción son obligatorios" });
+        }
+
+        const pythonUrl = `${process.env.PYTHON_MICROSERVICE_URL}/analizar-documento`;
+
+        const response = await axios.post(
+            pythonUrl,
+            { texto, accion }, 
+            { timeout: 120000 }
+        );
+
+        return res.status(200).json({
+            ok: true,
+            data: response.data 
+        });
+
+    } catch (error) {
+        console.error("❌ Error en improveText:", error.message);
+        return res.status(500).json({ ok: false, msg: "No se pudo procesar el análisis del texto" });
+    }
 };
