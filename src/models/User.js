@@ -49,6 +49,10 @@ const userSchema = new mongoose.Schema(
             wallpaperUrl: {
                 type: String,
                 default: null
+            },
+            wallpaperPublicId: {
+                type: String,
+                default: null
             }
         },
         

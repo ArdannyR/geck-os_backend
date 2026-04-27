@@ -7,7 +7,9 @@ export const uploadFileToCloudinary = async (filePath, folder = "VirtualDesk_Fil
             folder: folder,
             resource_type: "auto",
             use_filename: true,
-            unique_filename: true
+            unique_filename: true,
+            quality: "auto",
+            fetch_format: "auto"
         });
 
         await fs.unlink(filePath);
@@ -28,10 +30,12 @@ export const uploadFileToCloudinary = async (filePath, folder = "VirtualDesk_Fil
 export const uploadBase64ToCloudinary = async (base64, folder = "VirtualDesk_AI") => {
     const buffer = Buffer.from(base64.replace(/^data:image\/\w+;base64,/, ""), "base64");
 
-    const { secure_url } = await new Promise((resolve, reject) => {
+    const result = await new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream({
             folder,
-            resource_type: "auto"
+            resource_type: "auto",
+            quality: "auto",
+            fetch_format: "auto"
         }, (err, res) => {
             if (err) reject(err);
             else resolve(res);
@@ -39,5 +43,8 @@ export const uploadBase64ToCloudinary = async (base64, folder = "VirtualDesk_AI"
         stream.end(buffer);
     });
 
-    return secure_url;
+    return {
+        secure_url: result.secure_url,
+        public_id: result.public_id
+    };
 };

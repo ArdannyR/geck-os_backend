@@ -2,6 +2,7 @@ import axios from "axios";
 import User from "../models/User.js";
 import Item from "../models/item.js";
 import { uploadBase64ToCloudinary } from "../helpers/cloudinary.js";
+import { v2 as cloudinary } from "cloudinary";
 
 export const chatWithAssistant = async (req, res) => {
     try {
@@ -38,11 +39,18 @@ export const generateWallpaper = async (req, res) => {
 
         if (!prompt) return res.status(400).json({ ok: false, msg: "El prompt es obligatorio" });
 
+        const userDB = await User.findById(userId);
+        if (!userDB) return res.status(404).json({ ok: false, msg: "Usuario no encontrado" });
+
+        if (userDB.preferences?.wallpaperPublicId) {
+            await cloudinary.uploader.destroy(userDB.preferences.wallpaperPublicId).catch(() => {});
+        }
+
         const pythonUrl = `${process.env.PYTHON_MICROSERVICE_URL}/generar-fondo`;
 
         const response = await axios.post(
             pythonUrl,
-            { descripcion: prompt }, // Python espera 'descripcion'
+            { descripcion: prompt },
             { timeout: 120000 }
         );
         
@@ -52,10 +60,11 @@ export const generateWallpaper = async (req, res) => {
             return res.status(500).json({ ok: false, msg: "La IA no devolvió la imagen" });
         }
 
-        const secure_url = await uploadBase64ToCloudinary(base64Image, "VirtualDesk_Wallpapers");
+        const { secure_url, public_id } = await uploadBase64ToCloudinary(base64Image, "VirtualDesk_Wallpapers");
 
         await User.findByIdAndUpdate(userId, {
-            "preferences.wallpaperUrl": secure_url
+            "preferences.wallpaperUrl": secure_url,
+            "preferences.wallpaperPublicId": public_id
         });
 
         const io = req.app.get("io");

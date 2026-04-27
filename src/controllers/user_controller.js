@@ -118,11 +118,23 @@ export const updateImage = async (req, res) => {
             return res.status(400).json({ ok: false, msg: "Error al procesar el archivo temporal" });
         }
 
+        const userDB = await User.findById(userId);
+        if (!userDB) return res.status(404).json({ ok: false, msg: "Usuario no encontrado" });
+
+        if (userDB.preferences?.wallpaperPublicId) {
+            await cloudinary.uploader.destroy(userDB.preferences.wallpaperPublicId).catch(() => {});
+        }
+
         const { secure_url, public_id } = await uploadFileToCloudinary(file.tempFilePath, "VirtualDesk");
 
-        const userDB = await User.findByIdAndUpdate(
+        await User.findByIdAndUpdate(
             userId,
-            { $set: { "preferences.wallpaperUrl": secure_url } },
+            {
+                $set: {
+                    "preferences.wallpaperUrl": secure_url,
+                    "preferences.wallpaperPublicId": public_id
+                }
+            },
             { new: true }
         );
 
