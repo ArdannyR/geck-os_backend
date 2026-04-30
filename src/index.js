@@ -6,6 +6,8 @@ import Message from "./models/Message.js";
 import Chat from "./models/Chat.js";
 import { Server } from "socket.io";
 
+const onlineUsers = new Map();
+
 const startServer = async () => {
     await connection();
 
@@ -26,8 +28,20 @@ const startServer = async () => {
 
         socket.on("setup", (userId) => {
             socket.join(userId);
+            
+            // 2. Agregar al usuario al Map
+            onlineUsers.set(userId, socket.id);
+            
+            // Emitir a todos los DEMÁS usuarios que este usuario se conectó
+            socket.broadcast.emit("user_online", { userId });
+
             socket.emit("setup_complete", { userId });
-            console.log(`👤 Usuario ${userId} configurado`);
+            console.log(`👤 Usuario ${userId} configurado y en línea`);
+        });
+
+        // Evento extra (ideal): Enviar la lista de todos los conectados a quien lo pida
+        socket.on("get_online_users", () => {
+            socket.emit("online_users_list", Array.from(onlineUsers.keys()));
         });
 
         socket.on("join_chat", (chatId) => {
@@ -123,6 +137,22 @@ const startServer = async () => {
 
         socket.on("disconnect", () => {
             console.log("❌ Socket desconectado:", socket.id);
+
+            // 3. Buscar qué usuario tenía este socket.id para sacarlo del Map
+            let disconnectedUserId = null;
+            for (let [userId, sockId] of onlineUsers.entries()) {
+                if (sockId === socket.id) {
+                    disconnectedUserId = userId;
+                    onlineUsers.delete(userId);
+                    break;
+                }
+            }
+
+            // Si lo encontramos, emitimos el evento de desconexión a todos
+            if (disconnectedUserId) {
+                socket.broadcast.emit("user_offline", { userId: disconnectedUserId });
+                console.log(`🔴 Usuario ${disconnectedUserId} desconectado`);
+            }
         });
     });
 
