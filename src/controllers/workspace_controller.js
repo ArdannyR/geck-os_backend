@@ -1,5 +1,6 @@
 import Workspace from "../models/Workspace.js";
 import User from "../models/User.js";
+import Chat from "../models/Chat.js";
 
 export const createWorkspace = async (req, res) => {
     try {
@@ -18,10 +19,21 @@ export const createWorkspace = async (req, res) => {
 
         await newWorkspace.save();
 
+        const newChat = new Chat({
+            isGroup: true,
+            participants: [userId], 
+            admins: [userId],       
+            groupName: finalName,   
+            workspaceId: newWorkspace._id 
+        });
+
+        await newChat.save();
+
         return res.status(201).json({
             ok: true,
-            msg: "Espacio de trabajo creado",
-            workspace: newWorkspace
+            msg: "Espacio de trabajo y chat creados exitosamente",
+            workspace: newWorkspace,
+            chat: newChat 
         });
 
     } catch (error) {
