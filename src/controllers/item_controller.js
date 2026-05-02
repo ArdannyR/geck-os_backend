@@ -155,7 +155,8 @@ export const uploadFileItem = async (req, res) => {
 
         return res.status(201).json({ ok: true, msg: "Archivo subido exitosamente", item: newItem });
     } catch (error) {
-        return res.status(500).json({ ok: false, msg: "Error al subir el archivo" });
+        console.log("💥 Error real de subida:", error); 
+        return res.status(500).json({ ok: false, msg: "Error al subir el archivo", error: error.message });
     }
 };
 

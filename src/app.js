@@ -29,7 +29,8 @@ app.use(express.json());
 app.use(cors());
 app.use(fileUpload({
     useTempFiles: true,
-    tempFileDir: "./uploads"
+    tempFileDir: "/tmp/",
+    createParentPath: true
 }));
 
 app.get("/", (req, res) => res.send("🚀 Server Deck-os on"));

@@ -82,7 +82,7 @@ export const fetchChats = async (req, res) => {
         .populate("participants", "name email")
         .populate("admins", "name email")
         .populate("lastMessage")
-        .populate("workspaceId")
+        .populate("workspaceId", "name")
         .sort({ updatedAt: -1 });
 
         return res.status(200).json({ ok: true, chats });

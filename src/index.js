@@ -39,7 +39,6 @@ const startServer = async () => {
             console.log(`👤 Usuario ${userId} configurado y en línea`);
         });
 
-        // Evento extra (ideal): Enviar la lista de todos los conectados a quien lo pida
         socket.on("get_online_users", () => {
             socket.emit("online_users_list", Array.from(onlineUsers.keys()));
         });
@@ -152,6 +151,53 @@ const startServer = async () => {
             if (disconnectedUserId) {
                 socket.broadcast.emit("user_offline", { userId: disconnectedUserId });
                 console.log(`🔴 Usuario ${disconnectedUserId} desconectado`);
+            }
+        });
+
+        socket.on("message_delivered", async ({ messageIds, userId }) => {
+            try {
+                // Actualizar los mensajes a 'delivered'
+                await Message.updateMany(
+                    { _id: { $in: messageIds } },
+                    { $set: { status: 'delivered' } }
+                );
+                
+                // Emitir actualización al remitente
+                const messages = await Message.find({ _id: { $in: messageIds } });
+                messages.forEach(msg => {
+                    if (msg.senderId.toString() !== userId) {
+                        socket.to(msg.senderId.toString()).emit("message_status_update", {
+                            messageId: msg._id,
+                            status: 'delivered'
+                        });
+                    }
+                });
+            } catch (error) {
+                console.error("❌ Error en message_delivered:", error);
+            }
+        });
+
+        socket.on("message_read", async ({ chatId, userId }) => {
+            try {
+                // Actualizar a 'read' todos los mensajes de ese chat que no sean míos
+                await Message.updateMany(
+                    { chatId, senderId: { $ne: userId }, status: { $ne: 'read' } },
+                    { $set: { status: 'read' } }
+                );
+
+                const chat = await Chat.findById(chatId);
+                if(chat) {
+                    chat.participants.forEach(participantId => {
+                        if (participantId.toString() !== userId) {
+                            socket.to(participantId.toString()).emit("chat_read", {
+                                chatId,
+                                readBy: userId
+                            });
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error("❌ Error en message_read:", error);
             }
         });
     });

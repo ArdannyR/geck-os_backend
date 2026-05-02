@@ -53,7 +53,15 @@ const userSchema = new mongoose.Schema(
             wallpaperPublicId: {
                 type: String,
                 default: null
-            }
+            },
+            avatarUrl: {
+            type: String,
+            default: null
+            },
+            avatarPublicId: {
+            type: String,
+            default: null
+            },
         },
         
         savedDesktops: [{
